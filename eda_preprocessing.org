@@ -1,0 +1,13 @@
+#+TITLE: EDA & Preprocessing of Musical Corpus
+#+AUTHOR: 
+#+DATE: 2025-12-31
+
+#+PROPERTY: header-args:python :session thesis :results output
+
+* Introduction
+* Conclusion
+* Steps
+** Imports
+#+begin_src python :results output
+import zipfile
+#+end_src
