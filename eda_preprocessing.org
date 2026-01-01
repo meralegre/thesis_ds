@@ -8,6 +8,323 @@
 * Conclusion
 * Steps
 ** Imports
-#+begin_src python :results output
+
+#+begin_src python :results silent
+import pandas as pd
+import numpy as np
+
 import zipfile
+import pathlib
+from typing import List, Optional
 #+end_src
+
+
+** Kern syntax
+
+In the Humdrum syntax, columns of data are called SPINES. SPINES of information may change
+position within a file; they may disappear, or split into several columns, for example.
+
+Based on the information found in the Github repo with the Essen files [cite], the music files contain
+several indicators that need to be taken into account:
+
+*** INTERPRETATIONS
+  Labels that indicate the tyoe of information being represented in each Spine. They are
+  represented as two asterisks (**). We also have *SPINE-PATH TERMINATORS*, they indicate the end
+  of their respective spine, represented as *-
+
+*** TANDEM INTERPRETATIONS
+  Tandem interpretations are identified by a single leading asterisk (*).
+  Tandem interpretations encode additional or supplementary information, for example the names
+  of the voices
+
+*** COMMENTS
+  In any representation, some information may best be conveyed as
+  COMMENTS rather than as part of the encoded data. In Humdrum formats they are expressed as
+  exclamation marks:
+  - *GLOBAL COMMENTS*: they begin with two exclamation marks
+  - *LOCAL COMMENTS*: they begin with one exclamation mark
+  - *NULL LOCAL COMMENTS*: exclamation marks with no text
+
+*** PITCH
+  Enconded through a scheme of upper and lower case letters:
+  - c      middle C (i.e. C4)
+  - cc     C an octave higher than middle C (C5)
+  - C      C an octave lower than middle C (C3)
+  - CC     C two octaves lower than middle C (C2)
+  - B      B below middle C (B3)
+  - b      B a major seventh above middle C (B4)
+  - d#     D-sharp above middle C (D#4)
+  - d##    D double-sharp above middle C
+  - d###   D tiple-sharp above middle C
+  - e-     E-flat above middle C (enharmonically equivalent to d##)
+  - BB--   B double-flat; augmented ninth below middle C
+  - cn     C natural, middle C
+
+  Sharps, flats, and naturals are mutually exclusive in **kern, so tokens such as "cc#n" and
+  "GG-#" are illegal. Something to take into account when cleaning the data, in case some errors
+  are present.
+
+*** SLURS, TIES, PHRASES
+  - *Phrases*: indicated by {}
+  - *Slurs*: indicated by () --> ligadura entre notas distintas
+  - *Ties*: indicated by [] --> ligadura entre misma nota
+
+  They can be nested and elided (the overlapping of phrases, where the last note or chord
+  of one phrase serves simultaneously as the first note or chord of the next)
+
+*** ORNAMENTS
+  - "T" and "t": whole-tone and semitone TRILLS
+  - "M" and "m": whole-tone and semitone MORDENTS
+  - "W" and "w": whole-tone and semitone INVERTED MORDENTS
+  - "S":  a TURN
+  - dollar sign ("$"): an inverted (or Wagnerian) TURN
+  - "R":  When a concluding turn is appended to the end of an ornament, "R" is
+    added to the ornament signifier (as in "tR" and "TR").
+  - ":" (multi-note) ARPEGGIATION
+  - "0": presence of ornaments OTHER than trills, mordents, inverted mordents, and turns.
+
+*** ARTICULATION MARKS
+  - (') for STACCATO
+  - double-quote (") for PIZZICATO
+  - greve (`) for ATTACCA
+  - tilde (~) for TENUTO
+  - caret (^) for all note-related accents (including < and >)
+
+*** UP & DOWN BOWS
+  - up-bow (v) and down-bow (u)
+
+*** STEMS (plica)
+  - "/": Up-stem
+  - "\": Down-stem
+
+*** DURATIONS
+  0       breve duration (redonda)
+  1       whole duration
+  2       half duration
+  4       quarter duration
+  8       eighth duration
+  16      sixteenth duration
+  32      thirty-second duration
+  64      sixty-fourth duration
+
+  *Dotted notes*:
+    2.	dotted half duration
+    8..	doubly-dotted eighth duration
+
+  The semicolon (;) denotes a pause.
+
+*** GRACE NOTES & GROUPETTOS
+  - *ACCIACCATURAS*: "q", e.g "G#q"
+  - *GROUPETTOS*: "Q", e.g minature sixteenth-note middle C would be encoded as "16cQ"
+  - *APPOGGIATURAS*: The appoggiatura note itself is designated by the upper-case letter "P", whereas
+    the subsequent note (whose notated duration has been shorted) is designated by the
+    lower-case letter "p".
+
+*** BEAMING
+  - beginning and ends of beams are signified by the upper-case letters
+    "L" and "J" respectively
+  - Partial beams may extend to the right (K) or left (k)
+  - each beam is designated by its own L-J pair, e.g:
+    16..LL
+    64JJkk
+ 
+*** BARLINES
+   0-9	measure numbers
+   a-z	alternate measures
+   ;	pause
+   =	barline
+   ==	double barline
+   |	normal width visual rendering
+   !	heavy width visual rendering
+   '	partial barline (from second to fourth line)
+   `	partial barline (short stroke at top of staff)
+   -	invisible barline
+   :	repeat sign
+
+**** Examples
+     =	        unnumbered barline
+     =29 	the beginning of measure 29
+     =29; 	the beginning of measure 29 with pause
+     =29a	first occurrence of measure 29
+     =29c	third occurrence of measure 29
+     =29c;	third occurrence of measure 29 with pause
+     ==	        double barline
+     ==;	double barline with pause
+     =|	        unnumbered barline, normal line width
+     =!	        unnumbered barline, heavy line width
+     ==|!	double barline, normal line followed by heavy line
+     =29|	beginning of measure 29, normal line width
+     =:|:	barline with left and right repeats, normal line width
+     =:||:	barline with left and right repeats, two normal-width lines
+     ='	        unnumbered barline, rendered with partial barline (mid)
+     =29`	beginning of measure 29, rendered with partial barline (top)
+     =29-	beginning of measure 29, no barline drawn
+     ==:|!	double barline with repeat, normal/heavy lines
+     ==|	logical double barline, visually rendered as single normal line
+     |	        not a barline
+     29|	not a barline
+
+*** TABLE OF SIGNIFIERS
+	0       breve duration
+	1       whole duration
+	2       half duration
+	3       half-note triplet duration
+	4       quarter duration
+	6       quarter-note triplet duration
+	8       eighth duration
+	12      eighth-note triplet duration
+	16      sixteenth duration
+	24      sixteenth-note triplet duration
+	32      thirty-second duration
+	64      sixty-fourth duration
+	128     one-hundred and twenty-eighth duration
+	.       duration augmentation dot (must follow a number)
+	-       flat sign (minus character)
+	--      double-flat (two successive minus characters)
+	a-g     absolute pitches above middle C
+	A-G     absolute pitches below middle C
+	#       sharp
+	##      double sharp
+	h       end glissando
+	j       harmonic
+	k       partial beam extending leftward
+	kk      two partial beams extending leftward
+	m       mordent (semitone)
+	n       natural sign
+	p       designator of a note subsequent to an appoggiatura
+	q       acciaccatura (grace note signifier; in lieu of duration)
+	r       rest
+	t       trill (semitone)
+	u       down-bow
+	v       up-bow
+	w       inverted mordent (semitone)
+	x       editorial interpretation; immediately preceding signifier is
+                  interpreted
+	xx      editorial interpretation; entire data token is interpreted
+	y       editorial mark:  invisible symbol; unprinted note-, rest-, or
+	          barline-attribute, but logically implied
+	yy      editorial mark:  invisible symbol; unprinted note, rest, or
+	          barline, but logically implied
+	z       sforzando
+	H       begin glissando
+	I       generic articulation (unspecified articulation)
+	J       end beam
+	JJ      end two beams
+	K       partial beam extending rightward
+	KK      two partial beams extending rightward
+	L       start beam
+	LL      start two beams
+	M       mordent (whole tone)
+	O       generic ornament (unspecified ornament)
+	P       appoggiatura note designator
+	Q       groupetto note designator
+	R       signified ornament ends with a turn
+	S       turn
+	$       Wagnerian turn
+	T       trill (whole tone)
+	W       inverted mordent (whole tone)
+	X       editorial intervention; immediately preceding signifier is an
+	          editorial addition
+	XX      editorial intervention; entire data token is an editorial
+                  addition
+	Y       editorial mark:  sic marking; information is encoded
+	          literally, but is questionable
+	YY      editorial mark:  sic marking; entire data token is encoded
+	          literally, but is questionable
+	<space> (space character) multiple-stop conjunction -- indicates
+	        joint note-tokens
+	=       barline; == double barline
+	[       first note of a tie
+	]       last note of a tie
+	_       middle note(s) of a tie (underscore)
+	(       slur start
+	)       slur end
+	{       phrase mark (start)
+	}       phrase mark (end)
+	;       pause sign
+	'       staccato mark
+	s       spiccato
+	"       pizzicato mark
+	`       attacca mark
+	~       tenuto mark
+	^       accent mark
+	:       arpeggiation (of multi-note chord)
+	,       breath mark
+	/       up-stem
+	\       down-stem
+	&       elision marker (for slurs or phrases)
+	?       editorial mark: immediately preceding signifier has accompanying
+	          editorial footnote
+	??      editorial mark: entire preceding data token has accompanying
+	          editorial footnote
+
+*** SUMMARY
+
+| signified                           | signifier(s)        | comments                     |
+|-------------------------------------+---------------------+------------------------------|
+| 1. open phrase elision indicator    | &                   | must precede {               |
+| 2. open phrase mark                 | {                   |                              |
+| 3. open slur elision indicator      | &                   | must precede (               |
+| 4. open slur                        | (                   |                              |
+| 5. open tie                         | [                   |                              |
+| 6. duration                         | 0123456789          | any combination; signifiers  |
+| may be repeated                     |                     |                              |
+| 7. augmentation dot(s)              | .                   | signifier may be repeated    |
+| 8. pitch                            | abcdefgABCDEFG      | only one of; signifier may   |
+| be repeated                         |                     |                              |
+| 9. accidental                       | - or # or n         | - and # may be repeated      |
+| 10. pause                           | ;                   |                              |
+| 11. ornament                        | MmS$TtWwR or O      | O precludes others; no repe- |
+| tition of a given signifier;        |                     |                              |
+| must appear in order given          |                     |                              |
+| 12. appoggiatura designator         | p or P              |                              |
+| 13. acciaccatura designator         | q                   |                              |
+| 14. groupetto designator            | Q                   |                              |
+| 15. articulation                    | z ' " ` ~ ^ : or I  | I precludes others; no re-   |
+| petition of a given signifier;      |                     |                              |
+| must appear in order given          |                     |                              |
+| 16. bowing                          | u or v              | only one of                  |
+| 17. stem-direction                  | / or \              | only one of                  |
+| 18. beaming                         | L or J              | signifiers may be repeated   |
+| 19. partial beaming                 | k or K              | signifiers may be repeated   |
+| 20. user-defined marks              | il                  | one or more of;              |
+| NUVZ                                | may be repeated but |                              |
+| @ % +                               | < >                 | must be in order given       |
+| 21. closed or continuing tie        | ] or _              |                              |
+| 22. closed slur elision indicator   | &                   | must precede )               |
+| 23. closed slur                     | )                   |                              |
+| 24. closed phrase elision indicator | &                   | must precede }               |
+| 25. closed phrase mark              | }                   |                              |
+| 26. breath mark                     | ,                   |                              |
+| 27. editorial marks                 | xx or XX            |                              |
+| 28. editorial marks                 | yy or YY            |                              |
+| 29. editorial marks                 | ??                  |                              |
+|                                     |                     |                              |
+
+
+		  
+		  
+#+begin_src python :results output
+
+#+end_src
+
+
+** Essen Folksongs Data
+
+#+begin_src python :results silent
+ESSEN_ROOT = pathlib.Path("data/essen")
+
+ESSEN_REGIONS = ["europa", "asia", "africa", "america"]
+#+end_src
+
+** Parsing helpers
+
+According to the =**kern= specification, each token consists of a combination of signifiers
+encoding duration, pitch, accidentals, rests, ornaments, articulation, beaming, editorial
+marks, and other information.
+
+#+begin_src python :results output
+
+#+end_src
+
+#+RESULTS:
