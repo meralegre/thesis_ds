@@ -1,5 +1,5 @@
 #+TITLE: EDA & Preprocessing of Musical Corpus
-#+AUTHOR: 
+#+AUTHOR: Maria Gonzalez Alegre
 #+DATE: 2025-12-31
 
 #+PROPERTY: header-args:python :session thesis :results output
@@ -301,9 +301,6 @@ several indicators that need to be taken into account:
 | 29. editorial marks                 | ??                  |                              |
 |                                     |                     |                              |
 
-
-		  
-		  
 #+begin_src python :results output
 
 #+end_src
@@ -323,8 +320,110 @@ According to the =**kern= specification, each token consists of a combination of
 encoding duration, pitch, accidentals, rests, ornaments, articulation, beaming, editorial
 marks, and other information.
 
-#+begin_src python :results output
+For the purpose of melodic expectation modeling, we define *musical events* as
+notes and rests with the following properties:
 
+- *Kept information*:
+  - Duration digits and dots (=0–9= and =.=).
+  - Pitch letters (=a–g= / =A–G=) and accidentals (_ =, =-=, =#=, =n=).
+  - Rest marker =r= (and potentially pause =;=) to represent silence.
+- *Removed information*:
+  - Ornaments (trills, mordents, turns, etc.).
+  - Appoggiaturas, acciaccaturas (grace notes), and groupettos.
+  - Articulation, bowing, stem direction, beaming, partial beaming.
+  - User-defined and editorial marks.
+
+This follows the manual’s distinction between core syntactic information and
+decorative or editorial notation and matches common practice in IDyOM-style
+melodic modeling where durationless ornaments and purely notational details
+are excluded from the event stream.
+
+#+begin_src python :results silent
+# Core signifier sets
+DURATION_CHARS = set("0123456789.")
+PITCH_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+ACCIDENTAL_CHARS = set("_-#n")
+REST_CHAR = "r"
+PAUSE_CHAR = ";"
+
+# Non-core signifiers (to be removed)
+ORNAMENT_CHARS = set("Mm$STtwWRrO")     # ornaments
+APPOGGIATURA_CHARS = set("pP")          # appoggiaturas
+GRACE_CHAR = "q"                        # acciaccaturas
+GROUPETTO_CHAR = "Q"                    # groupettos
+ARTICULATION_CHARS = set("z'\"`^~:I")   # articulations
+BOWING_CHARS = set("uv")                # bowing positions
+STEM_DIR_CHARS = set("/\\")             # stem direction
+BEAM_CHARS = set("LJ")                  # beaming
+PARTIAL_BEAM_CHARS = set("kK")          # partial beaming
+EDITORIAL_CHARS = set("xXyY?")          # editorial marks
+USER_MARK_CHARS = set("iltNUVZ@%+")     # user-defined marks
+
+NON_CORE_CHARS = (
+    ORNAMENT_CHARS
+    | APPOGGIATURA_CHARS
+    | ARTICULATION_CHARS
+    | BOWING_CHARS
+    | STEM_DIR_CHARS
+    | BEAM_CHARS
+    | PARTIAL_BEAM_CHARS
+    | EDITORIAL_CHARS
+    | USER_MARK_CHARS
+)
 #+end_src
 
-#+RESULTS:
+*** Helper functions
+
+Above we defined which elements and characters are core for the analysis and processing
+of data in order to prepare it for modelling. In this section we will define helper functions
+to recognise said characters and clean the =**kern= files to prepare them for EDA and modelling.
+
+This first code block defines functions that will detect structural elements of the music files.
+Comments, tandems, interpretations, bar lines, etc. 
+Since these do not represent musical events, we do not need to include them in the process.
+Better skip them now to avoid unnecessary elements in the data.
+
+Even though for a more detailed and elaborate study of the musical data elements such as
+acciaturas and groupettos might be useful and interesting, we will opt to remove them for now.
+In case we want to work with their inclusion later on, we can simply rerun the cleaning of
+the data without the removal of these characters.
+
+#+begin_src python :results silent
+def is_interpretation(line: str) -> bool:
+  return line.startswith("**")
+
+def is_tandem(line: str) ->bool:
+  return line.startswith("*") and not line.startswith("**")
+
+def is_global_comment(line: str) -> bool:
+  return line.startswith("!!")
+
+def is_local_comment(line: str) -> bool:
+  return line.startswith("!") and not line.startswith("!!")
+
+def is_null_token(line: str) -> bool:
+  return line.startswith(".")
+
+def is_barline(line: str) -> bool:
+  return line.startwith("=")
+
+def has_grace_or_groupetto(tok: str) -> bool:
+  # Durationless ornaments that should not be counted as events.
+  return (GRACE_CHAR in tok) or (GROUPETTO_CHAR in tok)
+#+end_src
+
+We will stript all ornaments, bowing, stems, beamings and editorial marks as well to leave only
+the minimal syntactic information needed to define duration and pitch (including rests).
+This way we focus on structural melodic content rather than detailed notations. 
+
+#+begin_src python :results silent
+def strip_non_core_signifiers(tok: str) -> str:
+    """
+    Remove ornaments, articulation, beams, editorial marks and other
+    non-core signifiers, preserving duration, pitch, accidentals and rest.
+    """
+    return "".join(ch for ch in tok if ch not in NON_CORE_CHARS)
+#+end_src
+
+
+
