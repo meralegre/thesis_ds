@@ -2,11 +2,11 @@
 #+AUTHOR: Maria Gonzalez Alegre
 #+DATE: 2025-12-31
 
-#+PROPERTY: header-args:python :session thesis :results output
+#+PROPERTY: header-args:python :session py :results output :exports results :eval yes
 
 * Introduction
 * Conclusion
-* Steps
+* Preprocessing
 ** Imports
 
 #+begin_src python :results silent
@@ -15,9 +15,10 @@ import numpy as np
 
 import zipfile
 import pathlib
+import random
 from typing import List, Optional
+from dataclasses import dataclass
 #+end_src
-
 
 ** Kern syntax
 
@@ -301,11 +302,6 @@ several indicators that need to be taken into account:
 | 29. editorial marks                 | ??                  |                              |
 |                                     |                     |                              |
 
-#+begin_src python :results output
-
-#+end_src
-
-
 ** Essen Folksongs Data
 
 #+begin_src python :results silent
@@ -314,8 +310,8 @@ ESSEN_ROOT = pathlib.Path("data/essen")
 ESSEN_REGIONS = ["europa", "asia", "africa", "america"]
 #+end_src
 
-** Parsing helpers
-
+** Parsing decisions and functions
+<<sec:parsing>>
 According to the =**kern= specification, each token consists of a combination of signifiers
 encoding duration, pitch, accidentals, rests, ornaments, articulation, beaming, editorial
 marks, and other information.
@@ -327,6 +323,7 @@ notes and rests with the following properties:
   - Duration digits and dots (=0–9= and =.=).
   - Pitch letters (=a–g= / =A–G=) and accidentals (_ =, =-=, =#=, =n=).
   - Rest marker =r= (and potentially pause =;=) to represent silence.
+
 - *Removed information*:
   - Ornaments (trills, mordents, turns, etc.).
   - Appoggiaturas, acciaccaturas (grace notes), and groupettos.
@@ -338,6 +335,10 @@ decorative or editorial notation and matches common practice in IDyOM-style
 melodic modeling where durationless ornaments and purely notational details
 are excluded from the event stream.
 
+#TODO:
+GROUPING_CHARS: 
+
+*** Elements definitions
 #+begin_src python :results silent
 # Core signifier sets
 DURATION_CHARS = set("0123456789.")
@@ -345,9 +346,10 @@ PITCH_CHARS = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 ACCIDENTAL_CHARS = set("_-#n")
 REST_CHAR = "r"
 PAUSE_CHAR = ";"
+GROUPING_CHARS = set("{}()[]")
 
 # Non-core signifiers (to be removed)
-ORNAMENT_CHARS = set("Mm$STtwWRrO")     # ornaments
+ORNAMENT_CHARS = set("Mm$STtwWRO")     # ornaments
 APPOGGIATURA_CHARS = set("pP")          # appoggiaturas
 GRACE_CHAR = "q"                        # acciaccaturas
 GROUPETTO_CHAR = "Q"                    # groupettos
@@ -373,13 +375,17 @@ NON_CORE_CHARS = (
 #+end_src
 
 *** Helper functions
-
+<<sec:helper>>
 Above we defined which elements and characters are core for the analysis and processing
 of data in order to prepare it for modelling. In this section we will define helper functions
 to recognise said characters and clean the =**kern= files to prepare them for EDA and modelling.
 
-This first code block defines functions that will detect structural elements of the music files.
-Comments, tandems, interpretations, bar lines, etc. 
+Instead of directly defining a helper function for each unnecessary element in the data, we
+just focus for now on null tokens and durationless ornaments that were defined previously to
+avoid overcrowding later on the full cleaning function. Elements such as interpretations,
+tandems and comments are easily included in the bigger function, having small helper functions
+would be a good addition but it is not necessary for such small elements.
+
 Since these do not represent musical events, we do not need to include them in the process.
 Better skip them now to avoid unnecessary elements in the data.
 
@@ -389,23 +395,8 @@ In case we want to work with their inclusion later on, we can simply rerun the c
 the data without the removal of these characters.
 
 #+begin_src python :results silent
-def is_interpretation(line: str) -> bool:
-  return line.startswith("**")
-
-def is_tandem(line: str) ->bool:
-  return line.startswith("*") and not line.startswith("**")
-
-def is_global_comment(line: str) -> bool:
-  return line.startswith("!!")
-
-def is_local_comment(line: str) -> bool:
-  return line.startswith("!") and not line.startswith("!!")
-
-def is_null_token(line: str) -> bool:
+def is_null_token(line):
   return line.startswith(".")
-
-def is_barline(line: str) -> bool:
-  return line.startwith("=")
 
 def has_grace_or_groupetto(tok: str) -> bool:
   # Durationless ornaments that should not be counted as events.
@@ -425,5 +416,306 @@ def strip_non_core_signifiers(tok: str) -> str:
     return "".join(ch for ch in tok if ch not in NON_CORE_CHARS)
 #+end_src
 
+*** Parsing tokens
 
+The =parse_kern_token= function is the main function for the parsing process.
+It gathers the previous helper functions defined above in order to create a single
+=**kern= token into KernEvents.
+Why do we create a class for this?
+- We want to turn messy tokens into a structured, clean and homogenous event that will make it easier
+  to analyse and feed the models later on.
+
+In this section, we focus on the cleaning of the data. Ornaments and editorial notations are not
+necesary for our purpose and will just end up creating noise for the ultimate modelling section. 
+
+#+begin_src python :results output
+@dataclass
+class KernEvent:
+    duration: str
+    pitch: str
+    is_rest: bool
+
+
+def parse_kern_token(tok: str) -> Optional[KernEvent]:
+    tok = tok.strip()
+    if not tok or is_null_token(tok):
+        return None
+    if has_grace_or_groupetto(tok):
+        return None
+
+    tok = strip_non_core_signifiers(tok)
+
+    # strip grouping / phrasing markers that can wrap tokens
+    while tok and tok[0] in GROUPING_CHARS:
+        tok = tok[1:]
+    while tok and tok[-1] in GROUPING_CHARS:
+        tok = tok[:-1]
+    if not tok or is_null_token(tok):
+        return None
+
+    # Extract duration (leading digits + dots)
+    i = 0
+    dur_chars = []
+    while i < len(tok) and tok[i].isdigit():
+        dur_chars.append(tok[i])
+        i += 1
+    while i < len(tok) and tok[i] == ".":
+        dur_chars.append(tok[i])
+        i += 1
+    duration = "".join(dur_chars)
+    if not duration:
+        return None
+
+    pitch_part = tok[i:]
+    if not pitch_part:
+        return None
+
+    is_rest = (REST_CHAR in pitch_part) or (PAUSE_CHAR in pitch_part)
+    if is_rest:
+        pitch_norm = "r"
+    else:
+        pitch_chars = [ch for ch in pitch_part if ch in PITCH_CHARS or ch in ACCIDENTAL_CHARS]
+        if not pitch_chars:
+            return None
+        pitch_norm = "".join(pitch_chars)
+
+    return KernEvent(duration=duration, pitch=pitch_norm, is_rest=is_rest)
+
+#+end_src
+
+#+RESULTS:
+
+**** Example
+
+#+BEGIN_SRC python :results output
+# Some example **kern note tokens, including ornaments and rests.
+tokens = [
+    "4c",          # quarter-note C
+    "8g#",         # eighth-note G sharp
+    "4cL",         # quarter-note C with beaming (L) that should be stripped
+    "16bq",        # grace-note B (q) that should be discarded entirely
+    "8.cc#",       # dotted eighth-note C-sharp
+    "4r",          # quarter rest
+    "4G$'",        # quarter-note G with ornament ($) and articulation (') to drop
+    ".",
+]
+
+for tok in tokens:
+    ev = parse_kern_token(tok)
+    print(f"token={tok!r} ->", ev)
+#+END_SRC
+
+#+RESULTS:
+: token='4c' -> KernEvent(duration='4', pitch='c', is_rest=False)
+: token='8g#' -> KernEvent(duration='8', pitch='g#', is_rest=False)
+: token='4cL' -> KernEvent(duration='4', pitch='c', is_rest=False)
+: token='16bq' -> None
+: token='8.cc#' -> KernEvent(duration='8.', pitch='cc#', is_rest=False)
+: token='4r' -> KernEvent(duration='4', pitch='r', is_rest=True)
+: token="4G$'" -> KernEvent(duration='4', pitch='G', is_rest=False)
+: token='.' -> None
+
+** Loading and cleaning the Essen corpus
+This section walks the Essen folder structure (grouped by country/region),
+parses each file using the token‑level rules above, and filters out very short
+melodies. The result is a list of cleaned event sequences with metadata.
+
+We loop over each region found in the Essen data folder. For each folder we recursively
+find all Humdrum =**kern= files. After obtaining the files, we derive a simple
+contry label from the path by taking the second element of the relative path. This way
+we can group the results based on the countries and regions. 
+
+#+begin_src python :results silent
+def iter_essen_files():
+    """
+    Yield (path,) for every .krn file anywhere under data/essen.
+    """
+    for path in ESSEN_ROOT.rglob("*.krn"):
+        yield path
+#+end_src
+
+#+begin_src python :results output
+files_seen = list(iter_essen_files())
+print("Files seen:", len(files_seen))
+#+end_src
+
+#+RESULTS:
+: Files seen: 8473
+
+#+begin_src python :results output
+for i, p in enumerate(iter_essen_files()):
+    print(i, "->", p)
+    if i == 9:
+        break
+#+end_src
+
+#+RESULTS:
+#+begin_example
+0 -> data/essen/europa/misc/island02.krn
+1 -> data/essen/europa/misc/steier01.krn
+2 -> data/essen/europa/misc/norge02.krn
+3 -> data/essen/europa/misc/island01.krn
+4 -> data/essen/europa/misc/ellas01.krn
+5 -> data/essen/europa/misc/steier03.krn
+6 -> data/essen/europa/misc/steier02.krn
+7 -> data/essen/europa/misc/norge01.krn
+8 -> data/essen/europa/misc/steier06.krn
+9 -> data/essen/europa/misc/emmenth1.krn
+#+end_example
+
+
+After obtaining the =**kern= files, we need to extract from the full file the musical
+representations that we need for future training as explained in the [[sec:parsing][parsing section]]
+and the [[sec:helper][helper functions]] definition.
+This way, we apply the classification rules from the Humdrum spec:
+We skip empty lines and the following attributes:
+- global and local comments
+- interpretation lines that declare spyne types
+- tandem interpretations (e.g., name of voices)
+- barlines
+
+With this function we apply the cleaning previously defined with =parse_kern_tokens= on
+the full Humdrum file. 
+
+For the remaining lines, we split the data on tab and take the first token, assuming monophonic
+melodies and one relevant spine per file (which is how Essen is structured for melodic analysis)
+
+#+begin_src python :results output
+def load_kern_melody(path: pathlib.Path):
+    out = []
+    raw_tokens = 0
+    parsed_tokens = 0
+
+    with path.open("r", encoding="utf-8", errors="ignore") as f:
+        for raw in f:
+            line = raw.strip()
+            if not line:
+                continue
+
+            if line.startswith(("*", "!", "=", ".")):
+                continue
+
+            tok = line.split("\t")[0].strip()
+            raw_tokens += 1
+
+            ev = parse_kern_token(tok)
+            if ev is not None:
+                out.append(ev)
+                parsed_tokens += 1
+
+    return out
+
+test_path = pathlib.Path("data/essen/europa/misc/island02.krn")
+events = load_kern_melody(test_path)
+print("EVENTS:", len(events))
+for i, ev in enumerate(events[:10]):
+    print(i, ev)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+EVENTS: 48
+0 KernEvent(duration='8.', pitch='a', is_rest=False)
+1 KernEvent(duration='16', pitch='b', is_rest=False)
+2 KernEvent(duration='8', pitch='ccn', is_rest=False)
+3 KernEvent(duration='8.', pitch='b', is_rest=False)
+4 KernEvent(duration='16', pitch='a', is_rest=False)
+5 KernEvent(duration='8', pitch='g#', is_rest=False)
+6 KernEvent(duration='8.', pitch='a', is_rest=False)
+7 KernEvent(duration='16', pitch='b', is_rest=False)
+8 KernEvent(duration='8', pitch='ccn', is_rest=False)
+9 KernEvent(duration='4', pitch='b', is_rest=False)
+#+end_example
+
+
+#+begin_src python :results silent
+MIN_EVENTS = 20
+
+def collect_clean_essen():
+    melodies = []
+    meta_list = []
+
+    for path in ESSEN_ROOT.rglob("*.krn"):
+        events = load_kern_melody(path)
+        # if len(events) < MIN_EVENTS:
+        #     continue
+
+        # derive region/country from relative path
+        rel_parts = path.relative_to(ESSEN_ROOT).parts
+        region = rel_parts[0] if len(rel_parts) > 0 else "unknown"
+        country = rel_parts[1] if len(rel_parts) > 1 else "unknown"
+
+        melodies.append(events)
+        meta_list.append({
+            "filename": path.name,
+            "path": str(path),
+            "region": region,
+            "country": country,
+            "length": len(events),
+        })
+    return melodies, meta_list
+#+end_src
+
+#+begin_src python :results output
+melodies, meta = collect_clean_essen()
+print("Number of melodies:", len(melodies))
+#+end_src
+
+#+RESULTS:
+: Number of melodies: 8473
+
+Let's inspect some of the melodies
+#+begin_src python :results output
+idxs = random.sample(range(len(meta)), 20)
+for i in idxs:
+    print(i, meta[i]["region"], meta[i]["country"], meta[i]["filename"], "len:", meta[i]["length"])
+#+end_src
+
+#+RESULTS:
+#+begin_example
+7779 asia china han0894.krn len: 56
+1704 europa deutschl deut2790.krn len: 56
+7774 asia china han0670.krn len: 63
+1643 europa deutschl deut2350.krn len: 72
+6349 asia china shanx606.krn len: 46
+5536 europa schweiz suisse62.krn len: 40
+7376 asia china han0083.krn len: 77
+1331 europa deutschl deut2922.krn len: 62
+7816 asia china han0077.krn len: 32
+3825 europa deutschl deut1348.krn len: 44
+8143 asia china han0399.krn len: 40
+7284 asia china han0030.krn len: 51
+756 europa deutschl deut3601.krn len: 25
+5781 europa nederlan neder022.krn len: 49
+6895 asia china shanx352.krn len: 35
+3876 europa deutschl deut0679.krn len: 35
+7426 asia china han0337.krn len: 107
+7280 asia china han0781.krn len: 97
+7416 asia china han0653.krn len: 79
+7899 asia china han0528.krn len: 86
+#+end_example
+
+#+begin_src python :results output
+m0 = melodies[0]
+print("First melody: length", len(m0))
+print("First 10 events:")
+for i, ev in enumerate(m0[:10]):
+    print(i, ev)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+First melody: length 48
+First 10 events:
+0 KernEvent(duration='8.', pitch='a', is_rest=False)
+1 KernEvent(duration='16', pitch='b', is_rest=False)
+2 KernEvent(duration='8', pitch='ccn', is_rest=False)
+3 KernEvent(duration='8.', pitch='b', is_rest=False)
+4 KernEvent(duration='16', pitch='a', is_rest=False)
+5 KernEvent(duration='8', pitch='g#', is_rest=False)
+6 KernEvent(duration='8.', pitch='a', is_rest=False)
+7 KernEvent(duration='16', pitch='b', is_rest=False)
+8 KernEvent(duration='8', pitch='ccn', is_rest=False)
+9 KernEvent(duration='4', pitch='b', is_rest=False)
+#+end_example
 
