@@ -13,6 +13,7 @@
 import pandas as pd
 import numpy as np
 
+import re
 import zipfile
 import pathlib
 import random
@@ -719,41 +720,37 @@ First 10 events:
 9 KernEvent(duration='4', pitch='b', is_rest=False)
 #+end_example
 
+#+begin_src python :results output
+# Explode: one row per KernEvent
+events_df = []
+for i, (events, m) in enumerate(zip(melodies, meta)):
+    for j, ev in enumerate(events):
+        row = m.copy()
+        row.update({
+            'melody_id': i,
+            'position': j,
+            'pitch': ev.pitch,
+            'duration': ev.duration,
+            'is_rest': ev.is_rest
+        })
+        events_df.append(row)
 
-
-* Humdrum Tools
-
-#+begin_src sh
-rid -GLI data/essen/europa/misc/island02.krn | head -n 25
+df = pd.DataFrame(events_df)
+print(df.shape)
+print(df.sample(5))
 #+end_src
 
 #+RESULTS:
-| {8.a  |
-| 16b   |
-| 8ccn  |
-| 8.b   |
-| 16a   |
-| 8g#   |
-| =1    |
-| 8.a   |
-| 16b   |
-| 8ccn  |
-| 4b    |
-| 8r}   |
-| =2    |
-| {4b   |
-| 8b    |
-| 4ccn  |
-| 8dd   |
-| =3    |
-| 4.ee  |
-| 4dd   |
-| 8r}   |
-| =4    |
-| {4ccn |
-| 8ccn  |
-| 4ccn  |
+: (464343, 10)
+:             filename                                         path  region   country  length  melody_id  position pitch duration  is_rest
+: 423058   han0064.krn        data/essen/asia/china/han/han0064.krn    asia     china      34       7895         5     a       16    False
+: 201299  deut2079.krn  data/essen/europa/deutschl/erk/deut2079.krn  europa  deutschl      41       3980        25     f        2    False
+: 347650  shanx231.krn    data/essen/asia/china/shanxi/shanx231.krn    asia     china      45       6860         3    ff        4    False
+: 261174   deut170.krn  data/essen/europa/deutschl/fink/deut170.krn  europa  deutschl      61       5085        30     r        8     True
+: 237665   deut355.krn  data/essen/europa/deutschl/fink/deut355.krn  europa  deutschl     104       4707        51   ee-       4.    False
 
+* Humdrum Tools
+** Extracting and cleaning melodies
 #+begin_src bash :results output
 rid -GLI data/essen/europa/misc/island02.krn \
   | awk -F'\t' '{print $1}' \
@@ -786,3 +783,120 @@ head -n 20 /tmp/island02.tokens
 {4ccn
 8ccn
 #+end_example
+
+* EDA
+** Melody inspection
+
+#+begin_src bash :results output
+find data/essen -name "*.krn" | while read f; do
+  grep -m 1 '^\*\*' "$f" | awk -F'\t' '{print NF}'
+done | sort | uniq -c
+#+end_src
+
+#+RESULTS:
+: 8473 1
+
+#+begin_src python :results output
+from pathlib import Path
+
+voice_counts = {}
+
+for f in Path("data/essen").rglob("*.krn"):
+    with f.open(encoding="utf-8", errors="ignore") as fh:
+        for line in fh:
+            if line.startswith("**"):
+                n_voices = line.count("\t") + 1
+                voice_counts[n_voices] = voice_counts.get(n_voices, 0) + 1
+                break
+
+for k in sorted(voice_counts):
+    print(f"{k} voices: {voice_counts[k]} files")
+#+end_src
+
+#+RESULTS:
+: 1 voices: 8473 files
+
+** Obtaining keys
+
+#+begin_src bash :results output
+key data/essen/europa/misc/island02.krn
+#+end_src
+
+#+RESULTS:
+: Estimated key: A minor	(r=0.6230)	confidence:	42.6%
+
+#+begin_src bash :results output
+mkeyscape -ln data/essen/europa/misc/island02.krn | magick - ./island02_key.png
+#+end_src
+
+#+RESULTS:
+
+#+begin_src python :results output
+key_tandem_re = re.compile(r'^\*[A-Ga-g](?:#|-)?\s*:\s*$', re.M)
+ksig_re = re.compile(r'^\*k\[[^\]]*\]\s*$', re.M)
+
+def first_matches(path: Path=ESSEN_ROOT):
+    files = sorted(path.rglob("*.krn"))
+    data = []
+    for f in files:
+        txt = f.read_text(encoding="utf-8", errors="ignore")
+        key_m = key_tandem_re.search(txt)
+        ksig_m = ksig_re.search(txt)
+    
+        key_line = key_m.group(0) if key_m else None
+        ksig_line = ksig_m.group(0) if ksig_m else None
+
+        data.append({
+            'path': str(f),
+            'tonic': key_line,
+            'key_signature': ksig_line
+        })
+    return pd.DataFrame(data)
+
+
+key_df = first_matches(ESSEN_ROOT)
+#+end_src
+
+#+RESULTS:
+
+
+#+begin_src python :results output
+print(key_df.sample(10))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+                                                 path tonic key_signature
+8274            data/essen/europa/polska/polska23.krn   *G:        *k[f#]
+4428   data/essen/europa/deutschl/boehme/deut2966.krn   *F:        *k[b-]
+5589      data/essen/europa/deutschl/erk/deut1612.krn   *F:        *k[b-]
+944             data/essen/asia/china/han/han0869.krn   *G:        *k[f#]
+8291           data/essen/europa/romania/romani15.krn   *F:        *k[b-]
+3765   data/essen/europa/deutschl/boehme/deut2303.krn  *E-:    *k[b-e-a-]
+2650  data/essen/europa/deutschl/altdeu1/deut4001.krn   *F:        *k[b-]
+7201   data/essen/europa/deutschl/zuccal/deut4644.krn   *C:          *k[]
+6490      data/essen/europa/deutschl/fink/deut247.krn   *D:      *k[f#c#]
+4507      data/essen/europa/deutschl/dva/deut4467.krn   *G:        *k[f#]
+#+end_example
+
+#+begin_src python :results output
+print(key_df.dtypes)
+target_path = "data/essen/europa/polska/polska23.krn"
+row = key_df[key_df['path'] == target_path]
+print(row)
+#+end_src
+
+#+RESULTS:
+: path             object
+: tonic            object
+: key_signature    object
+: dtype: object
+:                                        path tonic key_signature
+: 8274  data/essen/europa/polska/polska23.krn   *G:        *k[f#]
+
+#+begin_src bash :results output
+key data/essen/europa/polska/polska23.krn
+#+end_src
+
+#+RESULTS:
+: Estimated key: G major	(r=0.8116)	confidence:	14.0%
