@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from collections import Counter
 
 import matplotlib
-matplotlib.use("Agg")
+# matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 import seaborn as sns
@@ -1016,6 +1016,50 @@ print(df_keys.head())
 : 2   data/essen/europa/misc/norge02.krn  G minor  0.7823        45.3  minor     G  europa
 : 3  data/essen/europa/misc/island01.krn  C major  0.7082        34.9  major     C  europa
 : 4   data/essen/europa/misc/ellas01.krn  G major  0.4829         6.1  major     G  europa
+
+#+begin_src python :results silent
+df_keys.to_csv("estimated_keys.csv", index=False)
+#+end_src
+
+#+begin_src python :results output
+tab = (
+    df_keys
+    .groupby(["region", "mode"])
+    .size()
+    .unstack(fill_value=0)
+)
+
+tab_prop = tab.div(tab.sum(axis=1), axis=0)
+print(tab_prop)
+#+end_src
+
+#+RESULTS:
+: mode        major     minor
+: region                     
+: africa   0.000000  1.000000
+: america  0.923077  0.076923
+: asia     0.755011  0.244989
+: europa   0.750845  0.249155
+
+#+begin_src python :results file graphics :file major_minor_proportion.png
+ax = tab_prop.plot(
+    kind="bar",
+    stacked=True,
+    figsize=(7,4),
+    colormap="viridis"
+)
+
+ax.set_ylabel("Proportion")
+ax.set_xlabel("Region")
+ax.set_title("Proportion of major vs minor modes by region (Essen corpus)")
+ax.legend(title="Mode", bbox_to_anchor=(1.02, 1), loc="upper left")
+plt.tight_layout()
+plt.savefig("major_minor_proportion.png", dpi=200)
+plt.close()
+#+end_src
+
+#+RESULTS:
+[[file:major_minor_proportion.png]]
 
 ** Graphs
 
