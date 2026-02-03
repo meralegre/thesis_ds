@@ -42,17 +42,20 @@ Based on the information found in the Github repo with the Essen files [cite], t
 several indicators that need to be taken into account:
 
 *** INTERPRETATIONS
-  Labels that indicate the tyoe of information being represented in each Spine. They are
+
+  Labels that indicate the type of information being represented in each Spine. They are
   represented as two asterisks (**). We also have *SPINE-PATH TERMINATORS*, they indicate the end
   of their respective spine, represented as *-
 
 *** TANDEM INTERPRETATIONS
+
   Tandem interpretations are identified by a single leading asterisk (*).
   Tandem interpretations encode additional or supplementary information, for example the names
   of the voices
 
 *** COMMENTS
-  In any representation, some information may best be conveyed as
+
+In any representation, some information may best be conveyed as
   COMMENTS rather than as part of the encoded data. In Humdrum formats they are expressed as
   exclamation marks:
   - *GLOBAL COMMENTS*: they begin with two exclamation marks
@@ -60,7 +63,8 @@ several indicators that need to be taken into account:
   - *NULL LOCAL COMMENTS*: exclamation marks with no text
 
 *** PITCH
-  Enconded through a scheme of upper and lower case letters:
+
+Enconded through a scheme of upper and lower case letters:
   - c      middle C (i.e. C4)
   - cc     C an octave higher than middle C (C5)
   - C      C an octave lower than middle C (C3)
@@ -79,6 +83,7 @@ several indicators that need to be taken into account:
   are present.
 
 *** SLURS, TIES, PHRASES
+
   - *Phrases*: indicated by {}
   - *Slurs*: indicated by () --> ligadura entre notas distintas
   - *Ties*: indicated by [] --> ligadura entre misma nota
@@ -87,6 +92,7 @@ several indicators that need to be taken into account:
   of one phrase serves simultaneously as the first note or chord of the next)
 
 *** ORNAMENTS
+
   - "T" and "t": whole-tone and semitone TRILLS
   - "M" and "m": whole-tone and semitone MORDENTS
   - "W" and "w": whole-tone and semitone INVERTED MORDENTS
@@ -98,6 +104,7 @@ several indicators that need to be taken into account:
   - "0": presence of ornaments OTHER than trills, mordents, inverted mordents, and turns.
 
 *** ARTICULATION MARKS
+
   - (') for STACCATO
   - double-quote (") for PIZZICATO
   - greve (`) for ATTACCA
@@ -105,14 +112,17 @@ several indicators that need to be taken into account:
   - caret (^) for all note-related accents (including < and >)
 
 *** UP & DOWN BOWS
+
   - up-bow (v) and down-bow (u)
 
 *** STEMS (plica)
+
   - "/": Up-stem
   - "\": Down-stem
 
 *** DURATIONS
-  0       breve duration (redonda)
+
+0       breve duration (redonda)
   1       whole duration
   2       half duration
   4       quarter duration
@@ -128,6 +138,7 @@ several indicators that need to be taken into account:
   The semicolon (;) denotes a pause.
 
 *** GRACE NOTES & GROUPETTOS
+
   - *ACCIACCATURAS*: "q", e.g "G#q"
   - *GROUPETTOS*: "Q", e.g minature sixteenth-note middle C would be encoded as "16cQ"
   - *APPOGGIATURAS*: The appoggiatura note itself is designated by the upper-case letter "P", whereas
@@ -135,6 +146,7 @@ several indicators that need to be taken into account:
     lower-case letter "p".
 
 *** BEAMING
+
   - beginning and ends of beams are signified by the upper-case letters
     "L" and "J" respectively
   - Partial beams may extend to the right (K) or left (k)
@@ -143,6 +155,7 @@ several indicators that need to be taken into account:
     64JJkk
  
 *** BARLINES
+
    0-9	measure numbers
    a-z	alternate measures
    ;	pause
@@ -179,7 +192,8 @@ several indicators that need to be taken into account:
      29|	not a barline
 
 *** TABLE OF SIGNIFIERS
-	0       breve duration
+
+        0       breve duration
 	1       whole duration
 	2       half duration
 	3       half-note triplet duration
@@ -663,16 +677,16 @@ def collect_clean_essen():
         # if len(events) < MIN_EVENTS:
         #     continue
 
-        # derive region/country from relative path
+        # derive continent/country from relative path
         rel_parts = path.relative_to(ESSEN_ROOT).parts
-        region = rel_parts[0] if len(rel_parts) > 0 else "unknown"
+        continent = rel_parts[0] if len(rel_parts) > 0 else "unknown"
         country = rel_parts[1] if len(rel_parts) > 1 else "unknown"
 
         melodies.append(events)
         meta_list.append({
             "filename": path.name,
             "path": str(path),
-            "region": region,
+            "continent": continent,
             "country": country,
             "length": len(events),
         })
@@ -691,31 +705,31 @@ Let's inspect some of the melodies
 #+begin_src python :results output
 idxs = random.sample(range(len(meta)), 20)
 for i in idxs:
-    print(i, meta[i]["region"], meta[i]["country"], meta[i]["filename"], "len:", meta[i]["length"])
+    print(i, meta[i]["continent"], meta[i]["country"], meta[i]["filename"], "len:", meta[i]["length"])
 #+end_src
 
 #+RESULTS:
 #+begin_example
-5152 europa deutschl deut028.krn len: 51
-1971 europa deutschl deut5132.krn len: 28
-482 europa deutschl deut3296.krn len: 26
-6659 asia china shanx318.krn len: 36
-2223 europa deutschl deut3845.krn len: 35
-7924 asia china han0689.krn len: 78
-6063 europa jugoslav jugos042.krn len: 18
-6491 asia china shanx264.krn len: 24
-341 europa deutschl deut4097.krn len: 42
-7336 asia china han0147.krn len: 128
-5895 europa elsass elsass21.krn len: 57
-7406 asia china han0861.krn len: 64
-1832 europa deutschl kindr203.krn len: 56
-648 europa deutschl deut3385.krn len: 34
-2942 europa deutschl deut1120.krn len: 34
-7464 asia china han0341b.krn len: 49
-4841 europa deutschl deut247.krn len: 80
-3065 europa deutschl deut0759.krn len: 42
-8119 asia china han0010.krn len: 23
-3850 europa deutschl deut1956.krn len: 51
+316 europa deutschl deut4309.krn len: 34
+3699 europa deutschl deut1026.krn len: 39
+5440 europa danmark danmark6.krn len: 46
+7147 asia china han0424.krn len: 69
+2521 europa deutschl deut4607.krn len: 44
+8165 asia china han0401.krn len: 45
+1148 europa deutschl deut2572.krn len: 62
+2678 europa deutschl deut4805.krn len: 51
+5719 europa nederlan neder071.krn len: 17
+41 europa deutschl deut5149.krn len: 59
+7501 asia china han0308.krn len: 62
+2483 europa deutschl deut4762.krn len: 60
+4 europa misc ellas01.krn len: 35
+5382 europa deutschl deut3739.krn len: 41
+6185 europa oesterrh oestr005.krn len: 29
+5335 europa deutschl deut3752.krn len: 65
+1477 europa deutschl deut2337.krn len: 77
+1859 europa deutschl kindr146.krn len: 35
+663 europa deutschl deut3626.krn len: 33
+4436 europa deutschl deut1339.krn len: 53
 #+end_example
 
 #+begin_src python :results output
@@ -743,7 +757,6 @@ First 10 events:
 #+end_example
 
 #+begin_src python :results output
-# Explode: one row per KernEvent
 events_df = []
 for i, (events, m) in enumerate(zip(melodies, meta)):
     for j, ev in enumerate(events):
@@ -764,15 +777,14 @@ print(df.sample(5))
 
 #+RESULTS:
 : (464343, 10)
-:             filename                                            path  region   country  length  melody_id  position pitch duration  is_rest
-: 330149  shanx116.krn       data/essen/asia/china/shanxi/shanx116.krn    asia     china      63       6505        42     c        2    False
-: 440788   han0428.krn           data/essen/asia/china/han/han0428.krn    asia     china      96       8135        49     c       8.    False
-: 281941  france01.krn           data/essen/europa/france/france01.krn  europa    france     139       5452        95     d        2    False
-: 35927   deut3562.krn  data/essen/europa/deutschl/ballad/deut3562.krn  europa  deutschl      30        772         0     c        8    False
-: 305267  elsass61.krn           data/essen/europa/elsass/elsass61.krn  europa    elsass      82       5953        70     e        4    False
+:             filename                                         path continent   country  length  melody_id  position pitch duration  is_rest
+: 439905   han0951.krn        data/essen/asia/china/han/han0951.krn      asia     china      41       8122        22    aa        8    False
+: 379226   han1098.krn        data/essen/asia/china/han/han1098.krn      asia     china      44       7339        34     b        8    False
+: 214751  deut0593.krn  data/essen/europa/deutschl/erk/deut0593.krn    europa  deutschl      42       4260        12    dd        8    False
+: 225899  deut1728.krn  data/essen/europa/deutschl/erk/deut1728.krn    europa  deutschl      66       4489         6     d        4    False
+: 231343  deut0838.krn  data/essen/europa/deutschl/erk/deut0838.krn    europa  deutschl      47       4601        42    b-        8    False
 
 * Humdrum Tools
-** Extracting and cleaning melodies
 
 The Humdrum data type counts as well with its tool kit that allows for the inspection and
 cleaning of raw =**kern= files. It is interesting to use it to double check wheter the manual
@@ -862,7 +874,16 @@ for k in sorted(voice_counts):
 #+RESULTS:
 : 1 voices: 8473 files
 
+Both the Humdrum tools and our manual Python inspection show that we just have monophonic music, which makes
+the whole process much easier.
+However, this just applies to the Essen corpus, luckly we already accounted for polyphonic music in the preprocessing in case
+the other corpus employed (The Meertens Tune Collecion) does indeed contain multiple voices. 
+
 ** Obtaining keys
+
+An interesing addition to the data that will be employed later on (as well as for the EDA) is the key
+and mode of the melodies.
+Humdrum provides tools necessary to estimate both for each melody. 
 
 #+begin_src bash :results output
 key data/essen/europa/misc/island02.krn
@@ -870,6 +891,19 @@ key data/essen/europa/misc/island02.krn
 
 #+RESULTS:
 : Estimated key: A minor	(r=0.6230)	confidence:	42.6%
+
+This "key" command returns the estimated key of each musical piece using Krumhansl’s tonal hiearchy method.
+A constraint is that this command is solely designed to detect major and minor modes (tonal system) (cite). It is unlikely
+that the data found in the corpus differs from this system, but it is still important to mention it as a limitation
+for more complex musical structures that may be used in the future.
+Also, key is unable to distinguish enharmonic spellings involving double- or triple- sharps or flats.
+That is, G double-sharp major is identified as A major (cite).
+
+The output shows as well the confidence value associated to the estimated key: this is a relative certainty
+measure among all keys it considered, not a probability that the piece “is” A minor in an absolute sense
+
+The third value returned is a correlation coefficient (r) measures how strongly the piece’s pitch-class profile matches an ideal
+representation of the estimated key. 
 
 #+begin_src bash :results output
 mkeyscape -ln data/essen/europa/misc/island01.krn | magick - ./island01_key.png
@@ -879,11 +913,25 @@ mkeyscape -ln data/essen/europa/misc/island01.krn | magick - ./island01_key.png
 
 *** Keys from the kern notation
 
+We can as well obtain they key from the kern files notation. The kern notation usually includes
+information as tandem interpretations in the very beginning of the file that can be translated
+into the key of the melody (without the tonal system).
+
+This information is given by the tonic and the key signature of the melody.
+The tonic represents the first note of the scale in which the melody is set (key).
+The key signature defines the key of the melody, that is which notes are altered in said
+scale. this includes the notes name and whether they contain sharps or flats. The flats are
+represented with =#= and the flats with =-=.
+
+The following section focuses on obtaining these elements from each melody.
+However, the tonic and key signature do not provide the major and minor keys.
+This will be covered in the next section. 
+
 #+begin_src python :results output
 key_tandem_re = re.compile(r'^\*[A-Ga-g](?:#|-)?\s*:\s*$', re.M)
 ksig_re = re.compile(r'^\*k\[[^\]]*\]\s*$', re.M)
 
-def first_matches(path: Path=ESSEN_ROOT):
+def key_matches(path: Path=ESSEN_ROOT):
     files = sorted(path.rglob("*.krn"))
     data = []
     for f in files:
@@ -902,7 +950,7 @@ def first_matches(path: Path=ESSEN_ROOT):
     return pd.DataFrame(data)
 
 
-key_df = first_matches(ESSEN_ROOT)
+key_df = key_matches(ESSEN_ROOT)
 #+end_src
 
 #+RESULTS:
@@ -913,25 +961,25 @@ print(key_df.sample(10))
 
 #+RESULTS:
 #+begin_example
-                                                path tonic key_signature
-4196  data/essen/europa/deutschl/boehme/deut2734.krn  *B-:      *k[b-e-]
-6913  data/essen/europa/deutschl/kinder/kindr104.krn   *F:        *k[b-]
-3420  data/essen/europa/deutschl/ballad/deut3349.krn   *G:        *k[f#]
-7542  data/essen/europa/deutschl/zuccal/deut4985.krn  *B-:      *k[b-e-]
-7790           data/essen/europa/italia/italia05.krn   *G:        *k[f#]
-8186         data/essen/europa/oesterrh/oestr039.krn   *G:        *k[f#]
-6451     data/essen/europa/deutschl/fink/deut208.krn   *F:        *k[b-]
-5864     data/essen/europa/deutschl/erk/deut1887.krn   *G:        *k[f#]
-5154     data/essen/europa/deutschl/erk/deut1177.krn   *F:        *k[b-]
-3675  data/essen/europa/deutschl/ballad/deut3604.krn   *G:        *k[f#]
+                                                 path tonic key_signature
+8364           data/essen/europa/schweiz/suisse23.krn   *G:        *k[f#]
+2840  data/essen/europa/deutschl/altdeu2/deut4191.krn   *D:      *k[f#c#]
+734             data/essen/asia/china/han/han0659.krn   *G:        *k[f#]
+4684      data/essen/europa/deutschl/erk/deut0707.krn   *F:        *k[b-]
+741             data/essen/asia/china/han/han0666.krn  *B-:      *k[b-e-]
+2611  data/essen/europa/deutschl/altdeu1/deut3962.krn   *F:        *k[b-]
+4013   data/essen/europa/deutschl/boehme/deut2551.krn   *G:        *k[f#]
+3776   data/essen/europa/deutschl/boehme/deut2314.krn   *G:        *k[f#]
+1876        data/essen/asia/china/shanxi/shanx434.krn   *D:      *k[f#c#]
+1065            data/essen/asia/china/han/han0990.krn  *B-:      *k[b-e-]
 #+end_example
 
 #+begin_src bash :results output
-key data/essen/europa/deutschl/erk/deut1612.krn
+key data/essen/asia/china/han/han0659.krn
 #+end_src
 
 #+RESULTS:
-: Estimated key: F major	(r=0.8513)	confidence:	33.4%
+: Estimated key: G major	(r=0.8750)	confidence:	33.6%
 
 #+begin_src python :results output
 df = pd.merge(df, key_df, on="path")
@@ -939,16 +987,23 @@ print(df.sample(5))
 #+end_src
 
 #+RESULTS:
-:             filename                                         path  region   country  length  melody_id  position pitch duration  is_rest tonic key_signature
-: 174689  deut0704.krn  data/essen/europa/deutschl/erk/deut0704.krn  europa  deutschl     132       3415       116     a       16    False   *C:          *k[]
-: 383433   han1014.krn        data/essen/asia/china/han/han1014.krn    asia     china      68       7395        53    cc       16    False   *F:        *k[b-]
-: 361929   han0988.krn        data/essen/asia/china/han/han0988.krn    asia     china      81       7121        59     d        8    False   *F:        *k[b-]
-: 456714  natmn047.krn    data/essen/asia/china/natmin/natmn047.krn    asia     china     220       8368         4    dd       16    False  *B-:      *k[b-e-]
-: 292111  lothr057.krn      data/essen/europa/lothring/lothr057.krn  europa  lothring      34       5678        11    dd        8    False   *g:      *k[b-e-]
+:             filename                                            path continent   country  length  melody_id  position pitch duration  is_rest tonic key_signature
+: 170883  deut2203.krn     data/essen/europa/deutschl/erk/deut2203.krn    europa  deutschl      75       3340        68     b       16    False   *G:        *k[f#]
+: 142173  deut4643.krn  data/essen/europa/deutschl/zuccal/deut4643.krn    europa  deutschl     106       2776        22    b-       16    False  *B-:      *k[b-e-]
+: 206719  deut0655.krn     data/essen/europa/deutschl/erk/deut0655.krn    europa  deutschl      52       4092        18    dd        8    False   *G:        *k[f#]
+: 263302   deut563.krn     data/essen/europa/deutschl/fink/deut563.krn    europa  deutschl     102       5118        86     c        4    False   *C:          *k[]
+: 402301   han0496.krn           data/essen/asia/china/han/han0496.krn      asia     china      80       7626         0    dd        8    False   *F:        *k[b-]
 
 *** Estimated keys with Humdrum tools
+
+With kern tools we can easily create a file with the estimated keys.
+As shown before, we employ the command =key= to obtain the estimated key of each melody, together with the
+correletion coefficient and the confidence value. The following code block reads through each kern file
+found in the essen folder and extracts the mentioned key values. Once all the values are obtained,
+these are stored into a csv file. 
+
 #+begin_src bash :results output
-find data/essen -name "*.krn" | while read f; do
+find ESSEN_ROOT -name "*.krn" | while read f; do
     key "$f" | awk -v file="$f" '
         /Estimated key:/ {
             key=$3" "$4
@@ -960,6 +1015,9 @@ done > estimated_keys.csv
 #+end_src
 
 #+RESULTS:
+
+After reading through the csv file, we found that there is no clear structure in it. When reading the
+csv file, we make sure to take into accont headers and name the columns for easier manipulation. 
 
 #+begin_src python :results output
 df_keys = pd.read_csv(
@@ -1004,18 +1062,18 @@ df_keys["tonic"] = (
     .str.replace(" minor", "", regex=False)
 )
 
-df_keys["region"] = df_keys["path"].apply(lambda p: p.split("/")[2])
+df_keys["continent"] = df_keys["path"].apply(lambda p: p.split("/")[2])
 
 print(df_keys.head())
 #+end_src
 
 #+RESULTS:
-:                                   path      key       r  confidence   mode tonic  region
-: 0  data/essen/europa/misc/island02.krn  A minor  0.6230        42.6  minor     A  europa
-: 1  data/essen/europa/misc/steier01.krn  G major  0.8366         9.3  major     G  europa
-: 2   data/essen/europa/misc/norge02.krn  G minor  0.7823        45.3  minor     G  europa
-: 3  data/essen/europa/misc/island01.krn  C major  0.7082        34.9  major     C  europa
-: 4   data/essen/europa/misc/ellas01.krn  G major  0.4829         6.1  major     G  europa
+:                                   path      key       r  confidence   mode tonic continent
+: 0  data/essen/europa/misc/island02.krn  A minor  0.6230        42.6  minor     A    europa
+: 1  data/essen/europa/misc/steier01.krn  G major  0.8366         9.3  major     G    europa
+: 2   data/essen/europa/misc/norge02.krn  G minor  0.7823        45.3  minor     G    europa
+: 3  data/essen/europa/misc/island01.krn  C major  0.7082        34.9  major     C    europa
+: 4   data/essen/europa/misc/ellas01.krn  G major  0.4829         6.1  major     G    europa
 
 #+begin_src python :results silent
 df_keys.to_csv("estimated_keys.csv", index=False)
@@ -1024,7 +1082,7 @@ df_keys.to_csv("estimated_keys.csv", index=False)
 #+begin_src python :results output
 tab = (
     df_keys
-    .groupby(["region", "mode"])
+    .groupby(["continent", "mode"])
     .size()
     .unstack(fill_value=0)
 )
@@ -1034,13 +1092,14 @@ print(tab_prop)
 #+end_src
 
 #+RESULTS:
-: mode        major     minor
-: region                     
-: africa   0.000000  1.000000
-: america  0.923077  0.076923
-: asia     0.755011  0.244989
-: europa   0.750845  0.249155
+: mode          major     minor
+: continent                    
+: africa     0.000000  1.000000
+: america    0.923077  0.076923
+: asia       0.755011  0.244989
+: europa     0.750845  0.249155
 
+*** Visual representation
 #+begin_src python :results file graphics :file major_minor_proportion.png
 ax = tab_prop.plot(
     kind="bar",
@@ -1050,32 +1109,42 @@ ax = tab_prop.plot(
 )
 
 ax.set_ylabel("Proportion")
-ax.set_xlabel("Region")
-ax.set_title("Proportion of major vs minor modes by region (Essen corpus)")
+ax.set_xlabel("Continent")
+ax.set_title("Proportion of major vs minor modes by continent (Essen corpus)")
 ax.legend(title="Mode", bbox_to_anchor=(1.02, 1), loc="upper left")
 plt.tight_layout()
-plt.savefig("major_minor_proportion.png", dpi=200)
+plt.savefig("major_minor_proportion.png", dpi=150, bbox_inches="tight")
 plt.close()
 #+end_src
 
 #+RESULTS:
 [[file:major_minor_proportion.png]]
 
+#+begin_src python :results file graphics :file tonic.png
+df_keys["tonic"].value_counts().head(10).plot(kind="bar")
+plt.title("Most common tonal centers")
+
+plt.savefig("tonic.png")
+plt.close()
+#+end_src
+
+#+RESULTS:
+[[file:tonic.png]]
+
 ** Graphs
 
 #+begin_src python :results output
-region_counts = Counter()
+continent_counts = Counter()
 
 for f in ESSEN_ROOT.rglob("*.krn"):
-    region = f.parts[2] if len(f.parts) > 2 else "unknown"
-    region_counts[region] += 1
+    continent = f.parts[2] if len(f.parts) > 2 else "unknown"
+    continent_counts[continent] += 1
 
-print(region_counts)
+print(continent_counts)
 #+end_src
 
 #+RESULTS:
 : Counter({'europa': 6213, 'asia': 2246, 'america': 13, 'africa': 1})
-
 
 
 #+begin_src python :results file graphics :file melody_lengths.png
@@ -1195,21 +1264,21 @@ plt.close()
 #+RESULTS:
 [[file:rhythm_freq.png]]
 
-#+begin_src python :results file graphics :file rhythm_by_region.png
+#+begin_src python :results file graphics :file rhythm_by_continent.png
 rows = []
 
 for f in files:
-    region = f.parts[2]
+    continent = f.parts[2]
     for ev in load_kern_melody(f):
-        rows.append((region, ev.duration))
+        rows.append((continent, ev.duration))
 
-df = pd.DataFrame(rows, columns=["region", "duration"])
+df = pd.DataFrame(rows, columns=["continent", "duration"])
 
 plt.figure(figsize=(12,5))
 sns.countplot(
     data=df,
     x="duration",
-    hue="region",
+    hue="continent",
     order=df["duration"].value_counts().index[:10],
     palette="viridis"
 )
@@ -1218,21 +1287,21 @@ plt.figure(figsize=(8,4), dpi=120)
 sns.countplot(
     data=df,
     x="duration",
-    hue="region",
+    hue="continent",
     order=df["duration"].value_counts().index[:10],
     palette="viridis"
 )
 plt.xticks(rotation=45)
 plt.tight_layout()
-plt.savefig("rhythm_by_region.png", dpi=120, bbox_inches="tight")
+plt.savefig("rhythm_by_continent.png", dpi=120, bbox_inches="tight")
 plt.close()
 #+end_src
 
 #+RESULTS:
-[[file:rhythm_by_region.png]]
+[[file:rhythm_by_continent.png]]
 
 
-#+begin_src python :results file graphics :file rhythm_norm_region.png
+#+begin_src python :results file graphics :file rhythm_norm_continent.png
 rows = []
 
 for f in files:
@@ -1241,23 +1310,23 @@ for f in files:
     for d in durations:
         rows.append((f.parts[2], d, 1/total))
 
-df = pd.DataFrame(rows, columns=["region", "duration", "weight"])
+df = pd.DataFrame(rows, columns=["continent", "duration", "weight"])
 
 plt.figure(figsize=(12,5))
 sns.barplot(
     data=df,
     x="duration",
     y="weight",
-    hue="region",
+    hue="continent",
     estimator=sum,
     palette="viridis"
 )
 
-plt.title("Normalized rhythmic distribution per region")
+plt.title("Normalized rhythmic distribution per continent")
 plt.tight_layout()
-plt.savefig("rhythm_norm_region.png", dpi=200)
+plt.savefig("rhythm_norm_continent.png", dpi=200)
 plt.close()
 #+end_src
 
 #+RESULTS:
-[[file:rhythm_norm_region.png]]
+[[file:rhythm_norm_continent.png]]
