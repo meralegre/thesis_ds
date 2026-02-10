@@ -1,3 +1,4 @@
+
 #+TITLE: EDA & Preprocessing of Musical Corpus
 #+AUTHOR: Maria Gonzalez Alegre
 #+DATE: 2025-12-31
@@ -633,7 +634,7 @@ def load_kern_melody(path: pathlib.Path):
 
     return out
 
-test_path = pathlib.Path("data/essen/europa/misc/island02.krn")
+test_path = pathlib.Path("data/essen/america/mexico/mexico02.krn")
 events = load_kern_melody(test_path)
 print("EVENTS:", len(events))
 for i, ev in enumerate(events[:10]):
@@ -642,17 +643,17 @@ for i, ev in enumerate(events[:10]):
 
 #+RESULTS:
 #+begin_example
-EVENTS: 48
-0 KernEvent(duration='8.', pitch='a', is_rest=False)
-1 KernEvent(duration='16', pitch='b', is_rest=False)
-2 KernEvent(duration='8', pitch='ccn', is_rest=False)
-3 KernEvent(duration='8.', pitch='b', is_rest=False)
-4 KernEvent(duration='16', pitch='a', is_rest=False)
-5 KernEvent(duration='8', pitch='g#', is_rest=False)
-6 KernEvent(duration='8.', pitch='a', is_rest=False)
-7 KernEvent(duration='16', pitch='b', is_rest=False)
-8 KernEvent(duration='8', pitch='ccn', is_rest=False)
-9 KernEvent(duration='4', pitch='b', is_rest=False)
+EVENTS: 88
+0 KernEvent(duration='8', pitch='r', is_rest=True)
+1 KernEvent(duration='8', pitch='c', is_rest=False)
+2 KernEvent(duration='8', pitch='c', is_rest=False)
+3 KernEvent(duration='8', pitch='c', is_rest=False)
+4 KernEvent(duration='8', pitch='f', is_rest=False)
+5 KernEvent(duration='4', pitch='r', is_rest=True)
+6 KernEvent(duration='8', pitch='a', is_rest=False)
+7 KernEvent(duration='8', pitch='r', is_rest=True)
+8 KernEvent(duration='8', pitch='c', is_rest=False)
+9 KernEvent(duration='8', pitch='c', is_rest=False)
 #+end_example
 
 Now, as the last step, we build the full clean corpus.
@@ -701,6 +702,13 @@ print("Number of melodies:", len(melodies))
 #+RESULTS:
 : Number of melodies: 8473
 
+#+begin_src python :results output
+print(len(melodies[0]))
+#+end_src
+
+#+RESULTS:
+: 48
+
 Let's inspect some of the melodies
 #+begin_src python :results output
 idxs = random.sample(range(len(meta)), 20)
@@ -710,26 +718,26 @@ for i in idxs:
 
 #+RESULTS:
 #+begin_example
-316 europa deutschl deut4309.krn len: 34
-3699 europa deutschl deut1026.krn len: 39
-5440 europa danmark danmark6.krn len: 46
-7147 asia china han0424.krn len: 69
-2521 europa deutschl deut4607.krn len: 44
-8165 asia china han0401.krn len: 45
-1148 europa deutschl deut2572.krn len: 62
-2678 europa deutschl deut4805.krn len: 51
-5719 europa nederlan neder071.krn len: 17
-41 europa deutschl deut5149.krn len: 59
-7501 asia china han0308.krn len: 62
-2483 europa deutschl deut4762.krn len: 60
-4 europa misc ellas01.krn len: 35
-5382 europa deutschl deut3739.krn len: 41
-6185 europa oesterrh oestr005.krn len: 29
-5335 europa deutschl deut3752.krn len: 65
-1477 europa deutschl deut2337.krn len: 77
-1859 europa deutschl kindr146.krn len: 35
-663 europa deutschl deut3626.krn len: 33
-4436 europa deutschl deut1339.krn len: 53
+2655 europa deutschl deut4794.krn len: 29
+3473 europa deutschl deut0666.krn len: 23
+5669 europa lothring lothr069.krn len: 31
+1330 europa deutschl deut2936.krn len: 62
+7980 asia china han1122.krn len: 52
+5917 europa elsass elsass85.krn len: 75
+1119 europa deutschl deut2765.krn len: 109
+160 europa deutschl deut4348.krn len: 61
+5218 europa deutschl deut4429.krn len: 31
+3381 europa deutschl deut1779.krn len: 72
+5361 europa deutschl deut3716.krn len: 47
+7967 asia china han0002.krn len: 57
+7977 asia china han0566.krn len: 88
+4679 europa deutschl deut146.krn len: 64
+2412 europa deutschl deut4505.krn len: 54
+4051 europa deutschl deut1824.krn len: 91
+4304 europa deutschl deut0624.krn len: 25
+2916 europa deutschl deut2039.krn len: 66
+4499 europa deutschl deut0620.krn len: 40
+1975 europa deutschl deut5125.krn len: 61
 #+end_example
 
 #+begin_src python :results output
@@ -777,15 +785,14 @@ print(df.sample(5))
 
 #+RESULTS:
 : (464343, 10)
-:             filename                                         path continent   country  length  melody_id  position pitch duration  is_rest
-: 439905   han0951.krn        data/essen/asia/china/han/han0951.krn      asia     china      41       8122        22    aa        8    False
-: 379226   han1098.krn        data/essen/asia/china/han/han1098.krn      asia     china      44       7339        34     b        8    False
-: 214751  deut0593.krn  data/essen/europa/deutschl/erk/deut0593.krn    europa  deutschl      42       4260        12    dd        8    False
-: 225899  deut1728.krn  data/essen/europa/deutschl/erk/deut1728.krn    europa  deutschl      66       4489         6     d        4    False
-: 231343  deut0838.krn  data/essen/europa/deutschl/erk/deut0838.krn    europa  deutschl      47       4601        42    b-        8    False
-
-* Humdrum Tools
-
+:             filename                                             path continent   country  length  melody_id  position pitch duration  is_rest
+: 173855  deut0711.krn      data/essen/europa/deutschl/erk/deut0711.krn    europa  deutschl      41       3402         7     g       8.    False
+: 4787    deut4249.krn  data/essen/europa/deutschl/altdeu2/deut4249.krn    europa  deutschl      16         85        11     c        2    False
+: 414679   han0880.krn            data/essen/asia/china/han/han0880.krn      asia     china      54       7780        34    f#        8    False
+: 210512  deut2094.krn      data/essen/europa/deutschl/erk/deut2094.krn    europa  deutschl      24       4173         1     g        4    False
+: 145666  deut5003.krn   data/essen/europa/deutschl/zuccal/deut5003.krn    europa  deutschl      64       2844        14    cc        4    False
+* Data Validation with Humdrum Tools
+** Selecting data
 The Humdrum data type counts as well with its tool kit that allows for the inspection and
 cleaning of raw =**kern= files. It is interesting to use it to double check wheter the manual
 preprocessing done is correct. Based on the results, the data obtained from the files corresponds
@@ -837,6 +844,124 @@ head -n 20 /tmp/island02.tokens
 4.cc
 8cc
 #+end_example
+
+** Validation
+
+#+begin_src bash :results output
+find data/essen -type f \( -name "*.krn" -o -name "*.kern" \) | sort > essen_files.txt
+wc -l essen_files.txt
+#+end_src
+
+#+RESULTS:
+:     8473 essen_files.txt
+
+#+begin_src bash :results output
+mkdir -p audit/logs
+
+while read -r f; do
+  base=$(basename "$f")
+  mint "$f" >audit/logs/"$base".out 2>audit/logs/"$base".err
+  echo "$?,${f}" >> audit/validator_exitcodes.csv
+done < essen_files.txt
+#+end_src
+
+#+RESULTS:
+
+#+begin_src bash :results output
+rid -GLI data/essen/europa/misc/island01.krn | extract -i '**kern' > out 2> err
+status=$?
+
+echo "$status,$f" >> audit/extract_exitcodes.csv
+#+end_src
+
+#+RESULTS:
+
+** Viewpoint availability
+
+Similar to what we did in the cleaning of the files with Python, in this case we do it with the Humdrum
+tools to double check the cleaning worked well (even though it was shown above that it was). This time
+we also take into account detecting notation that might not be found in files but that it is crucially
+important for the future creation of "viewpoints". In this step we want to make sure that we only
+keep the files that contain all the necessary information, that is for example duration, pitch, keys,
+
+*** Pitch
+We want to check that all the files include pitch values, otherwise the file would be empty and
+would be useless for our model.
+
+In this case, we a file is flagged if all non-bar tokens are rests (r) or empty.
+
+#+begin_src bash :results output
+rm -f audit/no_pitched_notes.csv
+: > audit/no_pitched_notes.csv
+
+while IFS= read -r f; do
+  f="${f%$'\r'}"   # guard against CRLF
+
+  if ! LC_ALL=C extract -i '**kern' "$f" \
+    | sed 's/^,//' \
+    | grep -Ev '^(!!!|!!|!|\*|=|\.|$)' \
+    | grep -Eq '[abcdefgABCDEFG]'; then
+    echo "$f" >> audit/no_pitched_notes.csv
+  fi
+done < essen_files.txt
+
+wc -l audit/no_pitched_notes.csv
+#+end_src
+
+#+RESULTS:
+:        1 audit/no_pitched_notes.csv
+
+In this process, we take into account several details from each file, including some of the files
+contained commas after each note, and cleaning for elements that do not express musical information.
+We conduct a similar cleaning process as what was done with =load_kern_melody=. However, in this case we
+want to make sure that all the files contain actual pitch representations to avoid using invalid melodies.
+
+The final result gives us one single file. Let's inspect it and see what seems to be the issue and whether
+it is worthy to keep it or remove it from the corpus. 
+
+#+begin_src bash :results output
+# extract -i '**kern' data/essen/asia/china/han/han0953.krn | head -n 30
+#+end_src
+
+
+Nothing seems to be returned, we can take a look into it with =load_kern_melody= and inspect whether the
+events are null or actuall appear. 
+
+#+begin_src python :results output
+events = load_kern_melody(pathlib.Path("data/essen/asia/china/han/han0953.krn"))
+print("EVENTS:", len(events))
+#+end_src
+
+#+RESULTS:
+: EVENTS: 0
+
+We see that this file is empty, just contains commentsm interpretations and editoral marks,
+elements that do not symbolize musical events, and therefore not important for our research.
+
+*** Duration
+#+begin_src bash :results output
+rm -f audit/missing_duration.csv
+: > audit/missing_duration.csv
+
+while IFS= read -r f; do
+  f="${f%$'\r'}"
+
+  if LC_ALL=C extract -i '**kern' "$f" \
+    | sed 's/^,//' \
+    | grep -Ev '^(!!!|!!|!|\*|=|\.|$)' \
+    | sed -E 's/^[\[{(]+//' \
+    | sed -E 's/[}\]]+$//' \
+    | grep -Ev '^[0-9]' \
+    | grep -q .; then
+    echo "$f" >> audit/missing_duration.csv
+  fi
+done < essen_files.txt
+
+wc -l audit/missing_duration.csv
+#+end_src
+
+#+RESULTS:
+:        0 audit/missing_duration.csv
 
 * EDA
 ** Melody inspection
@@ -891,6 +1016,13 @@ key data/essen/europa/misc/island02.krn
 
 #+RESULTS:
 : Estimated key: A minor	(r=0.6230)	confidence:	42.6%
+
+#+begin_src bash :results output
+keycor data/essen/europa/misc/island02.krn
+#+end_src
+
+#+RESULTS:
+: The best key is: A Minor
 
 This "key" command returns the estimated key of each musical piece using Krumhansl’s tonal hiearchy method.
 A constraint is that this command is solely designed to detect major and minor modes (tonal system) (cite). It is unlikely
@@ -1324,7 +1456,7 @@ sns.barplot(
 
 plt.title("Normalized rhythmic distribution per continent")
 plt.tight_layout()
-plt.savefig("rhythm_norm_continent.png", dpi=200)
+plt.savefig("rhythm_norm_continent.png", dpi=100, bbox_inches="tight")
 plt.close()
 #+end_src
 
