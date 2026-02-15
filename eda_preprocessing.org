@@ -14,6 +14,7 @@
 import pandas as pd
 import numpy as np
 
+import os
 import re
 import zipfile
 import pathlib
@@ -569,7 +570,7 @@ print("Files seen:", len(files_seen))
 #+end_src
 
 #+RESULTS:
-: Files seen: 8473
+: Files seen: 8472
 
 #+begin_src python :results output
 for i, p in enumerate(iter_essen_files()):
@@ -700,7 +701,7 @@ print("Number of melodies:", len(melodies))
 #+end_src
 
 #+RESULTS:
-: Number of melodies: 8473
+: Number of melodies: 8472
 
 #+begin_src python :results output
 print(len(melodies[0]))
@@ -718,26 +719,26 @@ for i in idxs:
 
 #+RESULTS:
 #+begin_example
-2655 europa deutschl deut4794.krn len: 29
-3473 europa deutschl deut0666.krn len: 23
-5669 europa lothring lothr069.krn len: 31
-1330 europa deutschl deut2936.krn len: 62
-7980 asia china han1122.krn len: 52
-5917 europa elsass elsass85.krn len: 75
-1119 europa deutschl deut2765.krn len: 109
-160 europa deutschl deut4348.krn len: 61
-5218 europa deutschl deut4429.krn len: 31
-3381 europa deutschl deut1779.krn len: 72
-5361 europa deutschl deut3716.krn len: 47
-7967 asia china han0002.krn len: 57
-7977 asia china han0566.krn len: 88
-4679 europa deutschl deut146.krn len: 64
-2412 europa deutschl deut4505.krn len: 54
-4051 europa deutschl deut1824.krn len: 91
-4304 europa deutschl deut0624.krn len: 25
-2916 europa deutschl deut2039.krn len: 66
-4499 europa deutschl deut0620.krn len: 40
-1975 europa deutschl deut5125.krn len: 61
+6701 asia china shanx043.krn len: 21
+8121 asia china han0945.krn len: 39
+3273 europa deutschl deut0575.krn len: 59
+3766 europa deutschl deut1580.krn len: 67
+6131 europa oesterrh oestr090.krn len: 30
+7875 asia china han0270.krn len: 103
+5516 europa polska polska24.krn len: 35
+6506 asia china shanx670.krn len: 45
+4705 europa deutschl deut396.krn len: 92
+2803 europa deutschl deut4865.krn len: 31
+8419 asia china natmn192.krn len: 33
+6251 asia china shanx371.krn len: 59
+51 europa deutschl deut4267.krn len: 29
+836 europa deutschl deut3015.krn len: 60
+3321 europa deutschl deut1859.krn len: 31
+7603 asia china han0045.krn len: 49
+2524 europa deutschl deut4820.krn len: 47
+3326 europa deutschl deut1124.krn len: 57
+7693 asia china han0288.krn len: 120
+2946 europa deutschl deut1849.krn len: 41
 #+end_example
 
 #+begin_src python :results output
@@ -785,12 +786,12 @@ print(df.sample(5))
 
 #+RESULTS:
 : (464343, 10)
-:             filename                                             path continent   country  length  melody_id  position pitch duration  is_rest
-: 173855  deut0711.krn      data/essen/europa/deutschl/erk/deut0711.krn    europa  deutschl      41       3402         7     g       8.    False
-: 4787    deut4249.krn  data/essen/europa/deutschl/altdeu2/deut4249.krn    europa  deutschl      16         85        11     c        2    False
-: 414679   han0880.krn            data/essen/asia/china/han/han0880.krn      asia     china      54       7780        34    f#        8    False
-: 210512  deut2094.krn      data/essen/europa/deutschl/erk/deut2094.krn    europa  deutschl      24       4173         1     g        4    False
-: 145666  deut5003.krn   data/essen/europa/deutschl/zuccal/deut5003.krn    europa  deutschl      64       2844        14    cc        4    False
+:             filename                                              path continent   country  length  melody_id  position pitch duration  is_rest
+: 137251  deut5074.krn    data/essen/europa/deutschl/zuccal/deut5074.krn    europa  deutschl      88       2686        18     e        8    False
+: 285473  suisse49.krn            data/essen/europa/schweiz/suisse49.krn    europa   schweiz      58       5543        22    fn        8    False
+: 314594  sverig06.krn            data/essen/europa/sverige/sverig06.krn    europa   sverige      50       6196        28    cc        8    False
+: 315365     usa03.krn                  data/essen/america/usa/usa03.krn   america       usa      52       6213        19    dd        4    False
+: 275179  deut3685.krn  data/essen/europa/deutschl/allerkbd/deut3685.krn    europa  deutschl      74       5318        47     a        8    False
 * Data Validation with Humdrum Tools
 ** Selecting data
 The Humdrum data type counts as well with its tool kit that allows for the inspection and
@@ -853,7 +854,7 @@ wc -l essen_files.txt
 #+end_src
 
 #+RESULTS:
-:     8473 essen_files.txt
+:     8472 essen_files.txt
 
 #+begin_src bash :results output
 mkdir -p audit/logs
@@ -920,9 +921,10 @@ The final result gives us one single file. Let's inspect it and see what seems t
 it is worthy to keep it or remove it from the corpus. 
 
 #+begin_src bash :results output
-# extract -i '**kern' data/essen/asia/china/han/han0953.krn | head -n 30
+extract -i '**kern' data/essen/asia/china/han/han0953.krn | head -n 30
 #+end_src
 
+#+RESULTS:
 
 Nothing seems to be returned, we can take a look into it with =load_kern_melody= and inspect whether the
 events are null or actuall appear. 
@@ -937,6 +939,10 @@ print("EVENTS:", len(events))
 
 We see that this file is empty, just contains commentsm interpretations and editoral marks,
 elements that do not symbolize musical events, and therefore not important for our research.
+
+#+begin_src python :results output
+os.remove(pathlib.Path("data/essen/asia/china/han/han0953.krn"))
+#+end_src
 
 *** Duration
 #+begin_src bash :results output
@@ -962,6 +968,331 @@ wc -l audit/missing_duration.csv
 
 #+RESULTS:
 :        0 audit/missing_duration.csv
+
+After taking into account all the elements and structures that are do not needed (as
+previously explained in the Pitch cleaning section), we can see that all the files contain
+duration information, all of them are valid and we can keep them for future modeling and
+analysis.
+
+*** Structural integrity
+#+begin_src bash :results output
+> audit/extract_fail.csv
+
+while read -r f; do
+  if ! rid -GLI "$f" | extract -i '**kern' > /dev/null 2>&1; then
+    echo "$f" >> audit/extract_fail.csv
+  fi
+done < essen_files.txt
+
+wc -l audit/extract_fail.csv
+#+end_src
+
+#+RESULTS:
+:        0 audit/extract_fail.csv
+
+** Statistical Analysis
+
+Humdrum tools only provide statistial tools to inspect each kern file individually. If we want
+to inspect all the songs at the same time, one option is to concatenate all the songs together,
+but this could in turn provide misleading information regarding the overall statistical data
+obtained.
+Nevertheless, it is interesting to look into how these tools perform and what their output tell us
+about our data.
+
+*** Intervals
+The function =mint= looks into the melodic intervals of each song
+#+begin_src bash :results output
+mint data/essen/america/mexico/mexico02.krn | grep -v '^[!*]' | head -n 10
+#+end_src
+
+#+RESULTS:
+#+begin_example
+{r
+[c]
+P1
+P1
+=1
++P4
+r
++M3
+r
+-M6
+#+end_example
+
+We can obtain a bit more of information on it with the count of the occurrance of each interval.
+
+#+begin_src bash :results output
+mint data/essen/america/mexico/mexico02.krn | grep -v '^[!=*]' | sort | uniq -c 
+#+end_src
+
+#+RESULTS:
+#+begin_example
+   5 +M2
+   6 +M3
+   5 +P4
+   7 +m3
+  10 -M2
+   1 -M2}
+   3 -M3
+   1 -M6
+   1 -P4
+   2 -P5
+   4 -m2
+   3 -m3
+  22 P1
+   1 [c]
+   6 r
+   3 r}
+   8 {r
+#+end_example
+
+From this analysis we can see that the most common (with the higher number of occurrences) intervals are
+P1 (perfect unison) and -M2 (descending Major Second). According to the paper "Predicting Variation of Folk
+Songs" (Janssen et al., 2017), the most common and influential melodic intervals are small pitch intervals,
+a standard feature of the Dutch folk song corpus.
+The presence and frequency of these small intervals carry specific psychological and structural meanings in the
+context of folk song variation:
+
+• **Predictor of Stability**: Phrases containing small pitch intervals are more stable and resist change more effectively
+as they are transmitted through oral tradition. In other words, phrases with smaller intervals are less subject to
+variation over time than those with large leaps
+
+• **Facilitation of Recall**: Small intervals enhance the memorability of a melody. Because these intervals are
+easier for singers to remember and reproduce, they contribute to the long-term retention of the piece in a musical tradition.
+
+• **Melodic Expectancy (Pitch Proximity)**: Small intervals correspond to the principle of pitch proximity, which
+states that listeners inherently expect the next note in a melody to be close in pitch to the one they just heard. The
+paper uses "high average proximity" as a formalization of expectancy—meaning phrases with small intervals contain
+"highly expected melodic material".
+
+In summary, the prevalence of small intervals in folk songs means these pieces are structured for efficient communication
+and recall, aligning with human cognitive predispositions that favor predictable, proximate pitch patterns.
+
+We can obtain the occurance of these type of intervals on the whole corpus with a bit more work and check whether these
+statements are also present in the corpus in general. In the following code block we read all the files, instead of
+concatenating them all together, =mint= is called individually for each melody inside the while loop:
+
+#+begin_src bash :results output
+while IFS= read -r f; do
+  f="${f%$'\r'}"
+  continent=$(echo "$f" | awk -F'/' '{print $3}')
+  mint "$f" 2>/dev/null \
+    | rid -GLId \
+    | sed 's/[{}()]//g' \
+    | grep -Ev '^(r|$)' \
+    | sed "s/^/${continent},/"
+done < essen_files.txt > audit/mint_by_continent.csv
+#+end_src
+
+#+RESULTS:
+
+#+begin_src python :results output
+df_int = pd.read_csv(
+    "audit/mint_by_continent.csv",
+    header=None,
+    names=["continent", "interval"]
+)
+
+mask = df_int['interval'].astype('str').str.contains('=')
+df_int = df_int[~mask]
+print(df_int)
+#+end_src
+
+#+RESULTS:
+#+begin_example
+       continent interval
+0         africa     [dd]
+2         africa      +P4
+3         africa      +M2
+4         africa      +m2
+5         africa      +M2
+...          ...      ...
+574202    europa      -m3
+574203    europa       P1
+574204    europa      -M2
+574205    europa      -m2
+574207    europa      +m2
+
+[447000 rows x 2 columns]
+#+end_example
+
+Throughout the corpus it still seems that small pitch intervals are the most occurrent in this corpus.
+This translates to a similar behaviour of folk music patterns across countries and regions.
+We can count the occurances of each interval per continent and check how this shows in a graph for more visual aid:
+
+#+begin_src python :results output
+print(df_int.groupby(["continent"])["interval"].value_counts().groupby("continent").head(5).to_frame())
+#+end_src
+
+#+RESULTS:
+#+begin_example
+                    count
+continent interval       
+africa    -m2          27
+          +m2          23
+          P1           23
+          +M2          21
+          -M2          20
+america   P1          180
+          -M2         115
+          +M2          65
+          +M3          54
+          +m3          46
+asia      -M2       32025
+          +M2       24064
+          P1        22413
+          -m3       17443
+          +m3       14695
+europa    P1        64186
+          -M2       61806
+          +M2       39461
+          -m2       24952
+          +m2       18572
+#+end_example
+
+This shows the top 5 more repeated intervals per continent. As expected, the most common are very small intervals,
+such as minor and major seconds, as well as perfect unison. We cannot confirm this is the general rule for africa
+since we only count with one melody belonging to this continent, however it still fits the assumptions and the
+conclusions drawn from the paper "Predicting Variation of Folk Songs" (Janssen et al., 2017).
+
+#+begin_src python :results file graphics :file interval_by_continent.png
+df_top = (
+    df_int
+    .groupby("continent")["interval"]
+    .value_counts()
+    .groupby("continent")
+    .head(10)
+    .rename("count")
+    .reset_index()
+)
+
+# Normalize per continent
+df_top["proportion"] = df_top.groupby("continent")["count"].transform(
+    lambda x: x / x.sum()
+)
+
+plt.figure(figsize=(14, 5))
+g = sns.barplot(
+    data=df_top,
+    x="interval",
+    y="proportion",
+    hue="continent",
+    order=df_int["interval"].value_counts().head(10).index,
+    palette="viridis"
+)
+
+sns.move_legend(g, "upper right", title="Continents")
+
+plt.xticks(rotation=45)
+plt.title("Top intervals by continent (normalized)")
+plt.tight_layout()
+plt.savefig("interval_by_continent.png", dpi=80, bbox_inches="tight")
+plt.close()
+#+end_src
+
+#+RESULTS:
+[[file:interval_by_continent.png]]
+
+From the graph we can observe that even though each continent presents small intervals as most employed in their
+melodies, there are still some differences among the use of intervals and their usage.
+For example, each continent uses in a similar proportion the descending M2 interval (major second).
+While America, together with Europa, presents the higher proportion of P1 (perfect unison), Asia and Africa show
+a smaller yet similar proportion in the usage of this interval. Interestingly, Africa shows the highest proportion
+of minor intervals, ascending and descending. We cannot take this as the ground truth for this continent since we
+only count with one song belonging to this region.
+Overall, we see a very similar representation of intervals across the four continents represented in this corpus.
+
+*** Entropy (Information Content)
+
+infot — calculate information theory measures for Humdrum inputs.
+provides a general-purpose tool for measuring the probability relationships
+between user-selected data tokens.
+
+- b output information (in bits) for each unique data token
+
+#+begin_src bash :results output
+infot -b data/essen/america/mexico/mexico01.krn
+#+end_src
+
+#+RESULTS:
+#+begin_example
+2f	6.392
+==	6.392
+8f}	6.392
+4b-	5.392
+4a	6.392
+4e	5.392
+4f	5.392
+8dd	4.807
+2g}	4.807
+{8cc	4.807
+4r}	6.392
+2a}	5.392
+4.c}	6.392
+8a	3.807
+8cc	4.392
+8c	2.807
+8d	5.392
+8e	4.392
+8f	4.807
+=10	6.392
+{8c	4.392
+8g	4.070
+=11	6.392
+4cc	6.392
+=1	6.392
+=12	6.392
+=13	6.392
+=2	6.392
+{8f	6.392
+=14	6.392
+=3	6.392
+=15	6.392
+=4	6.392
+=16	6.392
+=5	6.392
+=6	6.392
+=7	6.392
+=8	6.392
+=9	6.392
+8b-	4.807
+#+end_example
+
+#+begin_src bash :results output
+while IFS= read -r f; do
+  f="${f%$'\r'}"
+  result=$(mint "$f" 2>/dev/null \
+    | rid -GLId \
+    | sed 's/[{}()]//g' \
+    | grep -Ev '^(r|$)' \
+    | infot -b 2>/dev/null \
+    | awk '{sum += $NF; n++} END {if (n > 0) printf "%.4f", sum/n}')
+
+  if [ -n "$result" ]; then
+    echo "$f,$result"
+  fi
+done < essen_files.txt > audit/infot_intervals.csv
+#+end_src
+
+#+RESULTS:
+
+#+begin_src bash :results output
+head -10 audit/infot_intervals.csv
+#+end_src
+
+#+RESULTS:
+#+begin_example
+data/essen/africa/arabic01.krn,5.1651
+data/essen/america/mexico/mexico01.krn,5.6065
+data/essen/america/mexico/mexico02.krn,5.6549
+data/essen/america/mexico/mexico03.krn,5.6065
+data/essen/america/mexico/mexico04.krn,5.6549
+data/essen/america/misc/brasil01.krn,4.0897
+data/essen/america/misc/canada01.krn,4.9314
+data/essen/america/usa/usa01.krn,5.4886
+data/essen/america/usa/usa02.krn,4.9615
+data/essen/america/usa/usa03.krn,5.4544
+#+end_example
 
 * EDA
 ** Melody inspection
