@@ -19,6 +19,7 @@ import re
 import zipfile
 import pathlib
 import random
+import pprint
 from pathlib import Path
 from typing import List, Optional
 from dataclasses import dataclass
@@ -159,178 +160,40 @@ Enconded through a scheme of upper and lower case letters:
  
 *** BARLINES
 
-   0-9	measure numbers
-   a-z	alternate measures
-   ;	pause
-   =	barline
-   ==	double barline
-   |	normal width visual rendering
-   !	heavy width visual rendering
-   '	partial barline (from second to fourth line)
-   `	partial barline (short stroke at top of staff)
-   -	invisible barline
-   :	repeat sign
+  -  0-9	measure numbers
+  -  a-z	alternate measures
+  -  ;	        pause
+  -  =	        barline
+  -  ==	        double barline
+  -  |	        normal width visual rendering
+  -  !	        heavy width visual rendering
+  -  '   	partial barline (from second to fourth line)
+  -  `  	partial barline (short stroke at top of staff)
+  -  -  	invisible barline
+  -  :  	repeat sign
 
 **** Examples
-     =	        unnumbered barline
-     =29 	the beginning of measure 29
-     =29; 	the beginning of measure 29 with pause
-     =29a	first occurrence of measure 29
-     =29c	third occurrence of measure 29
-     =29c;	third occurrence of measure 29 with pause
-     ==	        double barline
-     ==;	double barline with pause
-     =|	        unnumbered barline, normal line width
-     =!	        unnumbered barline, heavy line width
-     ==|!	double barline, normal line followed by heavy line
-     =29|	beginning of measure 29, normal line width
-     =:|:	barline with left and right repeats, normal line width
-     =:||:	barline with left and right repeats, two normal-width lines
-     ='	        unnumbered barline, rendered with partial barline (mid)
-     =29`	beginning of measure 29, rendered with partial barline (top)
-     =29-	beginning of measure 29, no barline drawn
-     ==:|!	double barline with repeat, normal/heavy lines
-     ==|	logical double barline, visually rendered as single normal line
-     |	        not a barline
-     29|	not a barline
-
-*** TABLE OF SIGNIFIERS
-
-        0       breve duration
-	1       whole duration
-	2       half duration
-	3       half-note triplet duration
-	4       quarter duration
-	6       quarter-note triplet duration
-	8       eighth duration
-	12      eighth-note triplet duration
-	16      sixteenth duration
-	24      sixteenth-note triplet duration
-	32      thirty-second duration
-	64      sixty-fourth duration
-	128     one-hundred and twenty-eighth duration
-	.       duration augmentation dot (must follow a number)
-	-       flat sign (minus character)
-	--      double-flat (two successive minus characters)
-	a-g     absolute pitches above middle C
-	A-G     absolute pitches below middle C
-	#       sharp
-	##      double sharp
-	h       end glissando
-	j       harmonic
-	k       partial beam extending leftward
-	kk      two partial beams extending leftward
-	m       mordent (semitone)
-	n       natural sign
-	p       designator of a note subsequent to an appoggiatura
-	q       acciaccatura (grace note signifier; in lieu of duration)
-	r       rest
-	t       trill (semitone)
-	u       down-bow
-	v       up-bow
-	w       inverted mordent (semitone)
-	x       editorial interpretation; immediately preceding signifier is
-                  interpreted
-	xx      editorial interpretation; entire data token is interpreted
-	y       editorial mark:  invisible symbol; unprinted note-, rest-, or
-	          barline-attribute, but logically implied
-	yy      editorial mark:  invisible symbol; unprinted note, rest, or
-	          barline, but logically implied
-	z       sforzando
-	H       begin glissando
-	I       generic articulation (unspecified articulation)
-	J       end beam
-	JJ      end two beams
-	K       partial beam extending rightward
-	KK      two partial beams extending rightward
-	L       start beam
-	LL      start two beams
-	M       mordent (whole tone)
-	O       generic ornament (unspecified ornament)
-	P       appoggiatura note designator
-	Q       groupetto note designator
-	R       signified ornament ends with a turn
-	S       turn
-	$       Wagnerian turn
-	T       trill (whole tone)
-	W       inverted mordent (whole tone)
-	X       editorial intervention; immediately preceding signifier is an
-	          editorial addition
-	XX      editorial intervention; entire data token is an editorial
-                  addition
-	Y       editorial mark:  sic marking; information is encoded
-	          literally, but is questionable
-	YY      editorial mark:  sic marking; entire data token is encoded
-	          literally, but is questionable
-	<space> (space character) multiple-stop conjunction -- indicates
-	        joint note-tokens
-	=       barline; == double barline
-	[       first note of a tie
-	]       last note of a tie
-	_       middle note(s) of a tie (underscore)
-	(       slur start
-	)       slur end
-	{       phrase mark (start)
-	}       phrase mark (end)
-	;       pause sign
-	'       staccato mark
-	s       spiccato
-	"       pizzicato mark
-	`       attacca mark
-	~       tenuto mark
-	^       accent mark
-	:       arpeggiation (of multi-note chord)
-	,       breath mark
-	/       up-stem
-	\       down-stem
-	&       elision marker (for slurs or phrases)
-	?       editorial mark: immediately preceding signifier has accompanying
-	          editorial footnote
-	??      editorial mark: entire preceding data token has accompanying
-	          editorial footnote
-
-*** SUMMARY
-
-| signified                           | signifier(s)        | comments                     |
-|-------------------------------------+---------------------+------------------------------|
-| 1. open phrase elision indicator    | &                   | must precede {               |
-| 2. open phrase mark                 | {                   |                              |
-| 3. open slur elision indicator      | &                   | must precede (               |
-| 4. open slur                        | (                   |                              |
-| 5. open tie                         | [                   |                              |
-| 6. duration                         | 0123456789          | any combination; signifiers  |
-| may be repeated                     |                     |                              |
-| 7. augmentation dot(s)              | .                   | signifier may be repeated    |
-| 8. pitch                            | abcdefgABCDEFG      | only one of; signifier may   |
-| be repeated                         |                     |                              |
-| 9. accidental                       | - or # or n         | - and # may be repeated      |
-| 10. pause                           | ;                   |                              |
-| 11. ornament                        | MmS$TtWwR or O      | O precludes others; no repe- |
-| tition of a given signifier;        |                     |                              |
-| must appear in order given          |                     |                              |
-| 12. appoggiatura designator         | p or P              |                              |
-| 13. acciaccatura designator         | q                   |                              |
-| 14. groupetto designator            | Q                   |                              |
-| 15. articulation                    | z ' " ` ~ ^ : or I  | I precludes others; no re-   |
-| petition of a given signifier;      |                     |                              |
-| must appear in order given          |                     |                              |
-| 16. bowing                          | u or v              | only one of                  |
-| 17. stem-direction                  | / or \              | only one of                  |
-| 18. beaming                         | L or J              | signifiers may be repeated   |
-| 19. partial beaming                 | k or K              | signifiers may be repeated   |
-| 20. user-defined marks              | il                  | one or more of;              |
-| NUVZ                                | may be repeated but |                              |
-| @ % +                               | < >                 | must be in order given       |
-| 21. closed or continuing tie        | ] or _              |                              |
-| 22. closed slur elision indicator   | &                   | must precede )               |
-| 23. closed slur                     | )                   |                              |
-| 24. closed phrase elision indicator | &                   | must precede }               |
-| 25. closed phrase mark              | }                   |                              |
-| 26. breath mark                     | ,                   |                              |
-| 27. editorial marks                 | xx or XX            |                              |
-| 28. editorial marks                 | yy or YY            |                              |
-| 29. editorial marks                 | ??                  |                              |
-|                                     |                     |                              |
+  -  =	        unnumbered barline
+  -  =29 	the beginning of measure 29
+  -  =29; 	the beginning of measure 29 with pause
+  -  =29a	first occurrence of measure 29
+  -  =29c	third occurrence of measure 29
+  -  =29c;	third occurrence of measure 29 with pause
+  -  ==	        double barline
+  -  ==;	double barline with pause
+  -  =|	        unnumbered barline, normal line width
+  -  =!	        unnumbered barline, heavy line width
+  -  ==|!	double barline, normal line followed by heavy line
+  -  =29|	beginning of measure 29, normal line width
+  -  =:|:	barline with left and right repeats, normal line width
+  -  =:||:	barline with left and right repeats, two normal-width lines
+  -  ='	        unnumbered barline, rendered with partial barline (mid)
+  -  =29`	beginning of measure 29, rendered with partial barline (top)
+  -  =29-	beginning of measure 29, no barline drawn
+  -  ==:|!	double barline with repeat, normal/heavy lines
+  -  ==|	logical double barline, visually rendered as single normal line
+  -  |	        not a barline
+  -  29|	not a barline
 
 ** Essen Folksongs Data
 
@@ -720,26 +583,26 @@ for i in idxs:
 
 #+RESULTS:
 #+begin_example
-3277 europa deutschl deut1643.krn len: 57
-8465 asia china natmn035.krn len: 91
-2786 europa deutschl deut4904.krn len: 74
-2391 europa deutschl deut4665.krn len: 52
-1701 europa deutschl deut2753.krn len: 66
-6599 asia china shanx131.krn len: 52
-2651 europa deutschl deut4964.krn len: 74
-238 europa deutschl deut4141.krn len: 30
-4804 europa deutschl deut520.krn len: 71
-6322 asia china shanx217.krn len: 52
-1328 europa deutschl deut2705.krn len: 68
-2123 europa deutschl deut3792.krn len: 37
-1019 europa deutschl deut3049.krn len: 55
-6275 asia china shanx548.krn len: 20
-5891 europa elsass elsass19.krn len: 23
-3029 europa deutschl deut1241.krn len: 27
-3157 europa deutschl deut1046.krn len: 45
-2976 europa deutschl deut0767.krn len: 24
-3156 europa deutschl deut2229.krn len: 45
-5940 europa elsass elsass66.krn len: 55
+5578 europa schweiz suisse08.krn len: 64
+5041 europa deutschl deut473.krn len: 31
+2133 europa deutschl deut3817.krn len: 34
+6522 asia china shanx659.krn len: 24
+1761 europa deutschl kindr112.krn len: 39
+1645 europa deutschl deut2378.krn len: 46
+7216 asia china han0780.krn len: 72
+4474 europa deutschl deut1112.krn len: 40
+1142 europa deutschl deut2348.krn len: 30
+7457 asia china han0902.krn len: 78
+8017 asia china han0361.krn len: 54
+7126 asia china han0034.krn len: 48
+3242 europa deutschl deut2016.krn len: 34
+857 europa deutschl deut3376.krn len: 36
+5983 europa jugoslav jugos007.krn len: 20
+8313 asia china natmn174.krn len: 105
+7113 asia china han0977.krn len: 45
+2122 europa deutschl deut3786.krn len: 59
+6863 asia china shanx541.krn len: 30
+2102 europa deutschl deut3785.krn len: 62
 #+end_example
 
 #+begin_src python :results output
@@ -787,12 +650,14 @@ print(df_vp.sample(5))
 
 #+RESULTS:
 : (464343, 10)
-:             filename                                            path continent   country  length  melody_id  position pitch duration  is_rest
-: 375097   han0959.krn           data/essen/asia/china/han/han0959.krn      asia     china      40       7281        29   ccc       16    False
-: 433786   han0767.krn           data/essen/asia/china/han/han0767.krn      asia     china     100       8037        99     d        2    False
-: 93779   kindr202.krn  data/essen/europa/deutschl/kinder/kindr202.krn    europa  deutschl      36       1826         1    dd        8    False
-: 378046   han0185.krn           data/essen/asia/china/han/han0185.krn      asia     china      73       7326        38     b       16    False
-: 1296    siebethl.krn             data/essen/europa/misc/siebethl.krn    europa      misc     150         21       140     b       8.    False
+:             filename                                            path  ... duration is_rest
+: 384011   han0652.krn           data/essen/asia/china/han/han0652.krn  ...       16   False
+: 95915   kindr035.krn  data/essen/europa/deutschl/kinder/kindr035.krn  ...        4   False
+: 174316  deut0922.krn     data/essen/europa/deutschl/erk/deut0922.krn  ...        8   False
+: 42338   deut3272.krn  data/essen/europa/deutschl/ballad/deut3272.krn  ...        8   False
+: 205598  deut2256.krn     data/essen/europa/deutschl/erk/deut2256.krn  ...        8   False
+: 
+: [5 rows x 10 columns]
 
 #+begin_src python :results output
 print(df_vp.head(15))
@@ -800,23 +665,112 @@ print(df_vp.head(15))
 
 #+RESULTS:
 #+begin_example
-        filename                                 path continent country  length  melody_id  position pitch duration  is_rest
-0   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         0     a       8.    False
-1   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         1     b       16    False
-2   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         2   ccn        8    False
-3   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         3     b       8.    False
-4   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         4     a       16    False
-5   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         5    g#        8    False
-6   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         6     a       8.    False
-7   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         7     b       16    False
-8   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         8   ccn        8    False
-9   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         9     b        4    False
-10  island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0        10     r        8     True
-11  island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0        11     b        4    False
-12  island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0        12     b        8    False
-13  island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0        13   ccn        4    False
-14  island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0        14    dd        8    False
+        filename                                 path continent  ... pitch  duration  is_rest
+0   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     a        8.    False
+1   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b        16    False
+2   island02.krn  data/essen/europa/misc/island02.krn    europa  ...   ccn         8    False
+3   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b        8.    False
+4   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     a        16    False
+5   island02.krn  data/essen/europa/misc/island02.krn    europa  ...    g#         8    False
+6   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     a        8.    False
+7   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b        16    False
+8   island02.krn  data/essen/europa/misc/island02.krn    europa  ...   ccn         8    False
+9   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b         4    False
+10  island02.krn  data/essen/europa/misc/island02.krn    europa  ...     r         8     True
+11  island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b         4    False
+12  island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b         8    False
+13  island02.krn  data/essen/europa/misc/island02.krn    europa  ...   ccn         4    False
+14  island02.krn  data/essen/europa/misc/island02.krn    europa  ...    dd         8    False
+
+[15 rows x 10 columns]
 #+end_example
+
+** Duplicates removal
+We need to make sure we do not include any duplicate melodies in the corpus, otherwise we would be introducing
+a bias.
+We can define melodies being duplicates based on two conditions:
+1. Whether the melodies share the same notes (pitches) and duration
+2. Whether the melodies share the same pitch intervals and duration
+
+With the second case we account as well for transposition duplicates, that is the same melody
+in different pitches (for example, different octaves, or a fifth or a third apart, etc.)
+
+In order to get the full pitcture, we will first change the df format so that all the pitches and
+durations belonging to each melody are stored together in a list. That is each melody is associated to
+a list of pitches and durations. For now we will do the removal based solely on the exact duplicates,
+since this is what was approached on previous studies (Pearce, 2018).
+
+Same pitch and duration:
+#+begin_src python :results output
+prep = (df_vp.sort_values(["melody_id", "position"])
+             .groupby("melody_id")
+             .apply(lambda l: tuple(zip(l["pitch"], l["duration"]))))
+
+df_dupe = pd.DataFrame({"melody_id": prep.index, "signatures": prep.values})
+
+print(df_dupe.head())
+#+end_src
+
+#+RESULTS:
+:    melody_id                                         signatures
+: 0          0  ((a, 8.), (b, 16), (ccn, 8), (b, 8.), (a, 16),...
+: 1          1  ((d, 4), (b, 8), (d, 8), (g, 4), (b, 4), (dd, ...
+: 2          2  ((g, 8), (b-, 8), (dd, 4), (dd, 4), (cc, 4), (...
+: 3          3  ((cc, 4.), (cc, 16), (cc, 16), (cc, 4.), (cc, ...
+: 4          4  ((cc, 8), (cc, 2), (g, 4), (fn, 8), (g, 4), (a...
+
+#+begin_src python :results output
+
+# Removing exact duplicates
+
+melody_signatures = (df_dupe.drop_duplicates("melody_id")
+                           .set_index("melody_id")["signatures"])
+
+seen = {}
+keep_ids = []
+exact_dupes = []
+
+for mel_id, sig in melody_signatures.items():
+    sig = tuple(sig)
+    if sig in seen:
+        exact_dupes.append({"removed_id": mel_id, "duplicate_of": seen[sig], "type": "exact"})
+    else:
+        seen[sig] = mel_id
+        keep_ids.append(mel_id)
+
+print(len(df_dupe))
+print(len(exact_dupes))
+print(len(keep_ids))
+
+# pprint.pp(exact_dupes)
+
+df_survive = melody_signatures[keep_ids]
+print(len(df_survive))
+#+end_src
+
+#+RESULTS:
+: 8472
+: 269
+: 8203
+: 8203
+
+#+RESULTS:
+#+begin_example
+
+Error: TypeError: unsupported operand type(s) for -: 'str' and 'str'
+Traceback (most recent call last):
+  File "/var/folders/6f/_m3vtyy92m94t_l4qyl157240000gn/T/babel-8ddtPR/python-Ni2sLY", line 22, in <module>
+    isig = to_interval_sig(sig)
+  File "/var/folders/6f/_m3vtyy92m94t_l4qyl157240000gn/T/babel-8ddtPR/python-Ni2sLY", line 14, in to_interval_sig
+    intervals = tuple(b - a for a, b in zip(pitches[:-1], pitches[1:]))
+  File "/var/folders/6f/_m3vtyy92m94t_l4qyl157240000gn/T/babel-8ddtPR/python-Ni2sLY", line 14, in <genexpr>
+    intervals = tuple(b - a for a, b in zip(pitches[:-1], pitches[1:]))
+TypeError: unsupported operand type(s) for -: 'str' and 'str'
+#+end_example
+
+
+
+
 
 * Data Validation with Humdrum Tools
 ** Selecting data
@@ -936,7 +890,7 @@ wc -l audit/no_pitched_notes.csv
 #+end_src
 
 #+RESULTS:
-:        1 audit/no_pitched_notes.csv
+:        0 audit/no_pitched_notes.csv
 
 In this process, we take into account several details from each file, including some of the files
 contained commas after each note, and cleaning for elements that do not express musical information.
@@ -959,9 +913,6 @@ events are null or actuall appear.
 events = load_kern_melody(pathlib.Path("data/essen/asia/china/han/han0953.krn"))
 print("EVENTS:", len(events))
 #+end_src
-
-#+RESULTS:
-: EVENTS: 0
 
 We see that this file is empty, just contains commentsm interpretations and editoral marks,
 elements that do not symbolize musical events, and therefore not important for our research.
@@ -1230,58 +1181,45 @@ Overall, we see a very similar representation of intervals across the four conti
 
 *** Entropy (Information Content)
 
-infot — calculate information theory measures for Humdrum inputs.
+=infot=: calculate information theory measures for Humdrum inputs.
 provides a general-purpose tool for measuring the probability relationships
 between user-selected data tokens.
 
-- b output information (in bits) for each unique data token
+=-b= output information (in bits) for each unique data token. The output left column identifies each unique state
+and the right column provides the information content for that state measured in bits. 
+
+The key intuition: the greatest information content (lowest probability) is associated with the rarest tokens,
+while the lowest information content (highest probability) is associated with the most common tokens. 
 
 #+begin_src bash :results output
-infot -b data/essen/america/mexico/mexico01.krn
+infot -b -x ^= data/essen/america/mexico/mexico01.krn
 #+end_src
 
 #+RESULTS:
 #+begin_example
-2f	6.392
-==	6.392
-8f}	6.392
-4b-	5.392
-4a	6.392
-4e	5.392
-4f	5.392
-8dd	4.807
-2g}	4.807
-{8cc	4.807
-4r}	6.392
-2a}	5.392
-4.c}	6.392
-8a	3.807
-8cc	4.392
-8c	2.807
-8d	5.392
-8e	4.392
-8f	4.807
-=10	6.392
-{8c	4.392
-8g	4.070
-=11	6.392
-4cc	6.392
-=1	6.392
-=12	6.392
-=13	6.392
-=2	6.392
-{8f	6.392
-=14	6.392
-=3	6.392
-=15	6.392
-=4	6.392
-=16	6.392
-=5	6.392
-=6	6.392
-=7	6.392
-=8	6.392
-=9	6.392
-8b-	4.807
+2f	6.066
+8f}	6.066
+4b-	5.066
+4a	6.066
+4e	5.066
+4f	5.066
+8dd	4.481
+2g}	4.481
+{8cc	4.481
+4r}	6.066
+2a}	5.066
+4.c}	6.066
+8a	3.481
+8cc	4.066
+8c	2.481
+8d	5.066
+8e	4.066
+8f	4.481
+{8c	4.066
+8g	3.744
+4cc	6.066
+{8f	6.066
+8b-	4.481
 #+end_example
 
 #+begin_src bash :results output
@@ -1821,6 +1759,7 @@ plt.close()
 [[file:rhythm_norm_continent.png]]
 
 * Preparing final data structure for training
+** Pitch representation
 
 We will start with focusing on the pitch as the basic viewpoint to take into consideration
 since it is one the most representative viewpoints on IDyOM, as well as one of the most
@@ -1842,6 +1781,8 @@ score = converter.parse("data/essen/europa/misc/island02.krn")
 
 score.write("midi", fp="island02.midi")
 #+end_src
+
+#+RESULTS:
 
 But this way gives us a bit of a round path since we would then need to parse the midi file
 and then finally extract the pitch numbers. Instead, we can create some rules in order for
@@ -1909,14 +1850,121 @@ print(df_notes.sample(10))
 #+RESULTS:
 #+begin_example
             filename                                            path continent   country  length  melody_id  position pitch duration  midi_pitch
-132575  deut5066.krn  data/essen/europa/deutschl/zuccal/deut5066.krn    europa  deutschl      69       2597        21     g       16          67
-209151  deut1358.krn     data/essen/europa/deutschl/erk/deut1358.krn    europa  deutschl      67       4145        12     b        8          71
-225378  deut1648.krn     data/essen/europa/deutschl/erk/deut1648.krn    europa  deutschl      41       4478        20    cc        4          72
-383782   han0120.krn           data/essen/asia/china/han/han0120.krn      asia     china     215       7399       142    dd       16          74
-387336   han0900.krn           data/essen/asia/china/han/han0900.krn      asia     china     103       7439        54    gg       16          79
-76469   deut2732.krn  data/essen/europa/deutschl/boehme/deut2732.krn    europa  deutschl      66       1513        64     d        4          62
-369290   han1071.krn           data/essen/asia/china/han/han1071.krn      asia     china     166       7228       140     c        8          60
-144898  deut4523.krn  data/essen/europa/deutschl/zuccal/deut4523.krn    europa  deutschl      86       2827        84     c        4          60
-359417   han0195.krn           data/essen/asia/china/han/han0195.krn      asia     china     171       7085        55    dd       16          74
-132430  deut5080.krn  data/essen/europa/deutschl/zuccal/deut5080.krn    europa  deutschl      56       2594        51     g        8          67
+397544   han0899.krn           data/essen/asia/china/han/han0899.krn      asia     china      43       7566        30    f#        8          66
+307300  jugos060.krn         data/essen/europa/jugoslav/jugos060.krn    europa  jugoslav      28       6017        15     a        4          69
+49858   deut2776.krn  data/essen/europa/deutschl/boehme/deut2776.krn    europa  deutschl      85       1082        36     c        8          60
+156520  deut1889.krn     data/essen/europa/deutschl/erk/deut1889.krn    europa  deutschl      83       3055        50    dd        8          74
+370049   han0384.krn           data/essen/asia/china/han/han0384.krn      asia     china      46       7237        13    gg       4.          79
+1776    appenzel.krn             data/essen/europa/misc/appenzel.krn    europa      misc     146         27        64     e       16          64
+235241   deut393.krn     data/essen/europa/deutschl/fink/deut393.krn    europa  deutschl      92       4669         0     A        4          57
+374462   han0568.krn           data/essen/asia/china/han/han0568.krn      asia     china     393       7276        65     a        8          69
+443786   han0978.krn           data/essen/asia/china/han/han0978.krn      asia     china      77       8181        34     g        4          67
+228131  deut1676.krn     data/essen/europa/deutschl/erk/deut1676.krn    europa  deutschl      18       4531        17     G        2          55
+#+end_example
+
+Since this way may not be the most accurate and reliable, we can use IDyOM's built in functionality to
+export any dataset or database in the desired format, in this case MIDI. But, rather than just parsing
+the full corpus to MIDI and parsing everything again, we can easily export the melodies to a lisp file,
+where the CPITCH viewpoint is already found in the desired format (MIDI) notation, and compare it to the
+obtained pitch. Let's see how this behaves first with a smaller subset, in this case the Shanxi section
+of the China dataset (contains only 10 melodies).
+The way to obtain the lisp file was a simple IDyOM command: =(db:export-data (db:get-dataset 4) :lisp "./")=
+
+We can try first with a small number of melodies from the xinhua subset in the asia/china folder.
+Since it is a small number we can make a quicker comparison. 
+
+#+begin_src python :results output
+def parse_lisp_melodies(filepath, viewpoint=":CPITCH"):
+    with open(filepath, 'r') as f:
+        text = f.read()
+
+    # Find all melody blocks: ("melody_name" ...)
+    melody_pattern = r'\("([^"]+)"\s*\n((?:\s*\((?:\(:[A-Z].*?\)\s*)+\)\s*)+)'
+    melodies = {}
+
+    for melody in re.finditer(melody_pattern, text):
+        name = melody.group(1)
+        # skip dataset name
+        if "Dataset" in name or "Corpus" in name:
+            continue
+        block = melody.group(2)
+
+        # extract corresponding viewpoint from melody
+        pitch_pattern = rf'\({viewpoint}\s+(\d+)\)'
+        viewpoints = [int(p) for p in re.findall(pitch_pattern, block)]
+
+        if viewpoints:
+            melodies[name] = viewpoints
+            
+    return melodies
+
+shanxi_melodies = parse_lisp_melodies("dataset-4.lisp")
+# pprint.pp(df_shanxi_pitch)
+
+for name, pitches in shanxi_melodies.items():
+    print(f"{name}: {len(pitches)} notes, first 10: {pitches[:10]}")    
+#+end_src
+
+#+RESULTS:
+#+begin_example
+china01: 347 notes, first 10: [60, 74, 67, 60, 76, 67, 60, 79, 79, 60]
+china02: 211 notes, first 10: [57, 59, 62, 64, 64, 59, 62, 66, 64, 62]
+china03: 27 notes, first 10: [76, 78, 76, 74, 76, 78, 74, 76, 78, 76]
+china04: 79 notes, first 10: [60, 65, 65, 65, 64, 65, 67, 69, 77, 76]
+china05: 29 notes, first 10: [74, 74, 79, 81, 74, 72, 74, 79, 74, 76]
+china06: 174 notes, first 10: [66, 64, 66, 69, 71, 69, 74, 71, 69, 66]
+china07: 88 notes, first 10: [73, 76, 73, 85, 88, 83, 80, 85, 83, 80]
+china08: 27 notes, first 10: [64, 66, 64, 62, 64, 66, 62, 64, 66, 64]
+china09: 174 notes, first 10: [66, 64, 66, 69, 71, 69, 74, 71, 69, 66]
+china10: 27 notes, first 10: [64, 66, 64, 62, 64, 66, 62, 64, 66, 64]
+#+end_example
+
+#+begin_src python :results output
+xinhua = df_notes[df_notes["path"].str.contains("china01")]
+print(xinhua.head(10))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+           filename                                      path continent country  length  melody_id  position pitch duration  midi_pitch
+355683  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         0     c        4          60
+355684  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         1    dd        8          74
+355685  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         2     g        8          67
+355686  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         3     c        4          60
+355687  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         4    ee        8          76
+355688  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         5     g        8          67
+355689  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         6     c        4          60
+355690  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         7    gg        4          79
+355691  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         8    gg        2          79
+355692  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         9     c        4          60
+#+end_example
+
+They match perfectly so we can assume that both our function was reliable after all.
+
+** Dataframe format
+We can now group all the pitches in a melody in the same row for readability for now. We would
+need to check whether long format or compressed format are better for our transformer.
+
+#+begin_src python :results output
+melodies = (df_notes.sort_values(["melody_id", "position"])
+             .groupby("melody_id")["midi_pitch"]
+             .apply(list))
+
+print(melodies.head(10))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+melody_id
+0    [69, 71, 72, 71, 69, 68, 69, 71, 72, 71, 71, 7...
+1    [62, 71, 62, 67, 71, 74, 76, 74, 62, 71, 74, 7...
+2    [67, 70, 74, 74, 72, 72, 74, 70, 70, 69, 67, 6...
+3    [72, 72, 72, 72, 72, 72, 71, 69, 67, 67, 67, 6...
+4    [72, 72, 67, 65, 67, 68, 71, 68, 67, 67, 67, 6...
+5    [63, 62, 65, 68, 74, 77, 79, 75, 70, 72, 70, 6...
+6    [64, 65, 67, 76, 76, 74, 72, 64, 65, 62, 62, 6...
+7    [69, 69, 69, 67, 69, 74, 74, 72, 69, 69, 72, 7...
+8    [65, 69, 60, 65, 69, 72, 70, 60, 64, 60, 64, 6...
+9    [71, 72, 74, 72, 71, 71, 67, 69, 69, 71, 72, 7...
+Name: midi_pitch, dtype: object
 #+end_example
