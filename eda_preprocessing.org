@@ -1,5 +1,3 @@
-
-
 #+TITLE: EDA & Preprocessing of Musical Corpus
 #+AUTHOR: Maria Gonzalez Alegre
 #+DATE: 2025-12-31
@@ -584,26 +582,26 @@ for i in idxs:
 
 #+RESULTS:
 #+begin_example
-4441 europa deutschl deut1311.krn len: 52
-910 europa deutschl deut3070.krn len: 48
-3354 europa deutschl deut1508.krn len: 54
-3680 europa deutschl deut0674.krn len: 38
-2233 europa deutschl deut4044.krn len: 17
-4998 europa deutschl deut504.krn len: 128
-4736 europa deutschl deut431.krn len: 88
-7328 asia china han0393b.krn len: 153
-789 europa deutschl deut3372.krn len: 46
-1704 europa deutschl deut2790.krn len: 56
-6655 asia china shanx126.krn len: 63
-1437 europa deutschl deut2642.krn len: 123
-1339 europa deutschl deut2329.krn len: 51
-4388 europa deutschl deut0816.krn len: 38
-861 europa deutschl deut3438.krn len: 53
-5659 europa lothring lothr063.krn len: 30
-847 europa deutschl deut3558.krn len: 32
-3225 europa deutschl deut1721.krn len: 71
-3076 europa deutschl deut0942.krn len: 44
-7141 asia china han0587.krn len: 111
+7312 asia china han0344.krn len: 40
+4743 europa deutschl deut395.krn len: 63
+3900 europa deutschl deut1029.krn len: 61
+6561 asia china shanx316.krn len: 34
+19 europa misc oberhas1.krn len: 116
+8409 asia china natmn081.krn len: 25
+3465 europa deutschl deut1236.krn len: 51
+5219 europa deutschl deut4411.krn len: 24
+1944 europa deutschl kindr123.krn len: 53
+6878 asia china shanx637.krn len: 67
+3717 europa deutschl deut0700.krn len: 49
+2578 europa deutschl deut4598.krn len: 40
+7155 asia china han0626.krn len: 101
+7101 asia china han0426.krn len: 45
+7886 asia china han0714.krn len: 185
+7890 asia china han0728.krn len: 18
+1611 europa deutschl deut2769.krn len: 37
+4718 europa deutschl deut221.krn len: 58
+7211 asia china han0031.krn len: 32
+1493 europa deutschl deut2685.krn len: 44
 #+end_example
 
 #+begin_src python :results output
@@ -651,12 +649,14 @@ print(df_vp.sample(5))
 
 #+RESULTS:
 : (464343, 10)
-:             filename                                            path continent   country  length  melody_id  position pitch duration  is_rest
-: 237948   deut194.krn     data/essen/europa/deutschl/fink/deut194.krn    europa  deutschl      34       4712         3     b        4    False
-: 178382  deut1424.krn     data/essen/europa/deutschl/erk/deut1424.krn    europa  deutschl      46       3500        22    bn        4    False
-: 217124  deut2219.krn     data/essen/europa/deutschl/erk/deut2219.krn    europa  deutschl      36       4308        14     d        2    False
-: 85227   deut2750.krn  data/essen/europa/deutschl/boehme/deut2750.krn    europa  deutschl      69       1658        48    g#        8    False
-: 28067   deut3219.krn  data/essen/europa/deutschl/ballad/deut3219.krn    europa  deutschl      62        585         2    dd        8    False
+:             filename                                             path  ... duration is_rest
+: 427157   han0307.krn            data/essen/asia/china/han/han0307.krn  ...        4   False
+: 392226   han1016.krn            data/essen/asia/china/han/han1016.krn  ...        8   False
+: 206053  deut1213.krn      data/essen/europa/deutschl/erk/deut1213.krn  ...        4   False
+: 7219    deut4164.krn  data/essen/europa/deutschl/altdeu2/deut4164.krn  ...        4   False
+: 172631  deut1037.krn      data/essen/europa/deutschl/erk/deut1037.krn  ...        4   False
+: 
+: [5 rows x 10 columns]
 
 #+begin_src python :results output
 print(df_vp.head(15))
@@ -664,22 +664,24 @@ print(df_vp.head(15))
 
 #+RESULTS:
 #+begin_example
-        filename                                 path continent country  length  melody_id  position pitch duration  is_rest
-0   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         0     a       8.    False
-1   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         1     b       16    False
-2   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         2   ccn        8    False
-3   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         3     b       8.    False
-4   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         4     a       16    False
-5   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         5    g#        8    False
-6   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         6     a       8.    False
-7   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         7     b       16    False
-8   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         8   ccn        8    False
-9   island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0         9     b        4    False
-10  island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0        10     r        8     True
-11  island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0        11     b        4    False
-12  island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0        12     b        8    False
-13  island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0        13   ccn        4    False
-14  island02.krn  data/essen/europa/misc/island02.krn    europa    misc      48          0        14    dd        8    False
+        filename                                 path continent  ... pitch  duration  is_rest
+0   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     a        8.    False
+1   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b        16    False
+2   island02.krn  data/essen/europa/misc/island02.krn    europa  ...   ccn         8    False
+3   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b        8.    False
+4   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     a        16    False
+5   island02.krn  data/essen/europa/misc/island02.krn    europa  ...    g#         8    False
+6   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     a        8.    False
+7   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b        16    False
+8   island02.krn  data/essen/europa/misc/island02.krn    europa  ...   ccn         8    False
+9   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b         4    False
+10  island02.krn  data/essen/europa/misc/island02.krn    europa  ...     r         8     True
+11  island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b         4    False
+12  island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b         8    False
+13  island02.krn  data/essen/europa/misc/island02.krn    europa  ...   ccn         4    False
+14  island02.krn  data/essen/europa/misc/island02.krn    europa  ...    dd         8    False
+
+[15 rows x 10 columns]
 #+end_example
 
 ** Duplicates removal
@@ -730,7 +732,7 @@ exact_dupes = []
 for mel_id, sig in melody_signatures.items():
     sig = tuple(sig)
     if sig in seen:
-        exact_dupes.append({"removed_id": mel_id, "duplicate_of": seen[sig], "type": "exact"})
+        exact_dupes.append({"removed_id": mel_id, "duplicate_of": seen[sig]})
     else:
         seen[sig] = mel_id
         keep_ids.append(mel_id)
@@ -750,20 +752,67 @@ print(unique_melodies.sample(10))
 Original length of full dataframe: 8472
 How many melodies are duplicates of others: 269
  8203
-8203
 melody_id
-8166    ((g, 8), (g, 16), (g, 16), (a, 8), (a, 8), (dd...
-3474    ((g, 8), (b, 8), (dd, 8), (cc, 8), (b, 8), (a,...
-2617    ((d, 8), (d, 8), (g, 4), (g, 8), (g, 8), (g, 8...
-8218    ((dd, 16), (ee, 16), (dd, 16), (cc, 16), (dd, ...
-4714    ((g, 8.), (d, 16), (g, 8), (a, 8), (b, 16), (c...
-7148    ((a, 8), (a, 8), (b, 8), (ee, 4.), (ee, 8), (d...
-7823    ((b, 8), (a, 24), (b, 24), (a, 24), (f#, 4), (...
-4269    ((c, 8), (f, 8), (g, 8), (a, 8), (b-, 8), (cc,...
-6219    ((d, 8.), (d, 16), (a, 4.), (dd, 8), (a, 8.), ...
-338     ((g, 2), (g, 2), (g, 2), (a, 2), (b, 2), (cc, ...
+620     ((f, 4), (f, 4), (g, 4), (a, 4), (b-, 4), (cc,...
+1837    ((d, 8), (g, 8.), (a, 16), (b, 8), (cc, 8), (d...
+4941    ((d, 4), (g, 4.), (g, 8), (g, 4), (a, 4), (b, ...
+7524    ((f#, 8), (f#, 8), (a, 4), (b, 8), (f#, 16), (...
+2196    ((a, 2), (gn, 2.), (gn, 4), (a, 2.), (a, 4), (...
+3084    ((f, 4), (a, 4), (cc, 4), (b-, 4), (b-, 8), (e...
+8403    ((g, 8), (g, 4.), (g, 4), (d, 4), (g, 4), (e, ...
+1921    ((f, 4), (cc, 4), (cc, 4), (dd, 4), (dd, 4), (...
+4365    ((e, 8), (e, 8), (a, 8), (a, 8), (cc#, 8), (cc...
+640     ((d, 8), (g, 8), (g, 8), (b, 4.), (g, 8), (g, ...
 Name: signatures, dtype: object
 #+end_example
+
+#+begin_src python :results output
+print(len(unique_melodies))
+#+end_src
+
+#+RESULTS:
+: 8203
+
+#+begin_src python :results output
+df_dupes = pd.DataFrame(exact_dupes)
+print(df_test.head())
+#+end_src
+
+#+RESULTS:
+:    removed_id  duplicate_of
+: 0          34            32
+: 1          35            32
+: 2          36            33
+: 3          38            32
+: 4          39            37
+
+We can check now to which melodies each duplicate id corresponds to and drop them to avoid any biases
+when training IDyOM and our Transformer. 
+#+begin_src python :results output
+df_paths = df_vp[["filename", "path", "melody_id"]].drop_duplicates()
+
+duplicate_paths = df_dupes.merge(df_paths, left_on="removed_id", right_on="melody_id", how="inner")
+
+paths_removed = duplicate_paths["path"].to_list()
+#+end_src
+
+#+RESULTS:
+
+#+begin_src python :results silent
+for path in paths_removed:
+  os.remove(path)
+#+end_src
+
+Let's check whether the amount of files in our corpus has now changed:
+#+begin_src python :results output
+print(len(list(iter_essen_files())))
+#+end_src
+
+#+RESULTS:
+: 8203
+
+Which is exactly 8472 - 269, all the duplicate files have been removed. We can now add the final
+cleaned corpus to the IDyOM database and start experimenting with it.
 
 * Data Validation with Humdrum Tools
 ** Selecting data
@@ -1342,17 +1391,19 @@ print(df_notes.sample(10))
 
 #+RESULTS:
 #+begin_example
-            filename                                             path continent   country  length  melody_id  position pitch duration  midi_pitch
-290213  lothr010.krn          data/essen/europa/lothring/lothr010.krn    europa  lothring      40       5633        26    cc        8          72
-35251   deut3173.krn   data/essen/europa/deutschl/ballad/deut3173.krn    europa  deutschl      58        754        51    dd        4          74
-321726  shanx613.krn        data/essen/asia/china/shanxi/shanx613.krn      asia     china      91       6330        82     d        4          62
-390842   han0876.krn            data/essen/asia/china/han/han0876.krn      asia     china      83       7485        58     b        4          71
-226486  deut2037.krn      data/essen/europa/deutschl/erk/deut2037.krn    europa  deutschl      75       4500        19     d        4          62
-185694  deut1756.krn      data/essen/europa/deutschl/erk/deut1756.krn    europa  deutschl     115       3655        74    dd        4          74
-136860  deut4805.krn   data/essen/europa/deutschl/zuccal/deut4805.krn    europa  deutschl      51       2678        49     g        4          67
-79857   deut2795.krn   data/essen/europa/deutschl/boehme/deut2795.krn    europa  deutschl      60       1567        18    c#        4          61
-15317   deut4118.krn  data/essen/europa/deutschl/altdeu2/deut4118.krn    europa  deutschl      55        287        39    cc        2          72
-258319   deut117.krn      data/essen/europa/deutschl/fink/deut117.krn    europa  deutschl      41       5037        37     d       16          62
+            filename                                              path  ... duration midi_pitch
+253054   deut517.krn       data/essen/europa/deutschl/fink/deut517.krn  ...        8         62
+249088   deut122.krn       data/essen/europa/deutschl/fink/deut122.krn  ...        8         71
+274511  deut3669.krn  data/essen/europa/deutschl/allerkbd/deut3669.krn  ...        8         76
+372739   han0420.krn             data/essen/asia/china/han/han0420.krn  ...       16         69
+197372  deut1767.krn       data/essen/europa/deutschl/erk/deut1767.krn  ...        4         72
+399653   han0912.krn             data/essen/asia/china/han/han0912.krn  ...       4.         66
+1949    deut5150.krn      data/essen/europa/deutschl/test/deut5150.krn  ...        8         62
+312589  oestr076.krn           data/essen/europa/oesterrh/oestr076.krn  ...        8         69
+322340  shanx148.krn         data/essen/asia/china/shanxi/shanx148.krn  ...        8         70
+418382   han0265.krn             data/essen/asia/china/han/han0265.krn  ...        4         74
+
+[10 rows x 10 columns]
 #+end_example
 
 Since the manual mapping may not be the most accurate and reliable, we can use IDyOM's built in functionality to
@@ -1419,17 +1470,19 @@ print(xinhua.head(10))
 
 #+RESULTS:
 #+begin_example
-           filename                                      path continent country  length  melody_id  position pitch duration  midi_pitch
-355683  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         0     c        4          60
-355684  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         1    dd        8          74
-355685  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         2     g        8          67
-355686  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         3     c        4          60
-355687  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         4    ee        8          76
-355688  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         5     g        8          67
-355689  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         6     c        4          60
-355690  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         7    gg        4          79
-355691  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         8    gg        2          79
-355692  china01.krn  data/essen/asia/china/xinhua/china01.krn      asia   china     348       7038         9     c        4          60
+           filename                                      path  ... duration midi_pitch
+355683  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        4         60
+355684  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        8         74
+355685  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        8         67
+355686  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        4         60
+355687  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        8         76
+355688  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        8         67
+355689  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        4         60
+355690  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        4         79
+355691  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        2         79
+355692  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        4         60
+
+[10 rows x 10 columns]
 #+end_example
 
 They match perfectly so we can assume that both our function was reliable after all.
@@ -1443,23 +1496,25 @@ unique_melodies = (df_notes.sort_values(by=["melody_id", "position"])
                    .groupby("melody_id")["midi_pitch"]
                    .apply(list))
 
+unique_melodies = unique_melodies[keep_ids]
 unique_melodies = pd.DataFrame({"melody_id": unique_melodies.index, "pitch":unique_melodies.values})
 print(unique_melodies.sample(10))
+unique_melodies.to_csv("data/unique_melodies.csv")
 #+end_src
 
 #+RESULTS:
 #+begin_example
       melody_id                                              pitch
-1532       1532  [55, 55, 55, 57, 55, 64, 62, 60, 60, 59, 57, 5...
-5526       5526  [67, 67, 69, 65, 67, 64, 64, 67, 67, 69, 65, 6...
-2665       2665  [64, 64, 64, 64, 64, 64, 65, 65, 65, 64, 64, 6...
-4104       4104  [62, 67, 67, 66, 69, 67, 64, 62, 62, 64, 64, 6...
-4858       4858  [65, 67, 69, 70, 72, 72, 72, 72, 74, 70, 77, 7...
-1704       1704  [55, 55, 60, 60, 60, 60, 59, 60, 62, 55, 55, 5...
-6688       6688  [72, 72, 77, 74, 72, 69, 67, 72, 72, 77, 74, 7...
-1823       1823  [62, 67, 67, 67, 71, 67, 62, 62, 71, 67, 71, 7...
-3935       3935  [64, 69, 68, 69, 71, 72, 69, 71, 76, 74, 72, 7...
-1127       1127  [62, 67, 69, 71, 69, 62, 69, 71, 72, 71, 71, 7...
+2145       2158  [60, 62, 64, 60, 65, 64, 62, 60, 62, 60, 67, 6...
+4018       4048  [72, 70, 72, 69, 67, 65, 70, 72, 69, 67, 65, 6...
+190         197  [65, 65, 69, 67, 65, 67, 67, 69, 65, 69, 70, 7...
+7784       8045  [69, 69, 67, 69, 72, 77, 74, 74, 72, 69, 72, 7...
+4740       4773  [62, 71, 71, 71, 69, 69, 69, 72, 71, 69, 69, 7...
+743         750  [65, 62, 65, 70, 62, 65, 70, 74, 70, 74, 72, 7...
+2228       2241  [65, 65, 65, 69, 69, 72, 72, 69, 72, 72, 72, 7...
+2152       2165  [65, 65, 65, 69, 65, 69, 70, 72, 72, 69, 74, 7...
+5898       6144  [71, 71, 71, 72, 71, 72, 74, 71, 67, 71, 71, 7...
+1641       1654  [67, 67, 70, 67, 67, 65, 63, 65, 67, 63, 67, 6...
 #+end_example
 
 Checking into the melodies that were flagged as duplicated
@@ -1777,7 +1832,6 @@ plt.close()
 #+RESULTS:
 [[file:tonic.
 png]]
-
 
 ** Graphs
 #+begin_src python :results output
