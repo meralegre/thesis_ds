@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 import os
 import pathlib
-import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -235,7 +234,6 @@ def find_exact_duplicates(df: pd.DataFrame) -> Tuple[List[int], List[dict]]:
         .groupby("melody_id")
         .apply(lambda g: tuple(zip(g["pitch"], g["duration"])))
     )
-    melody_sigs = prep.drop_duplicates()
 
     seen: dict = {}
     keep_ids: list[int] = []
