@@ -2,10 +2,8 @@
 #+AUTHOR: Maria Gonzalez Alegre
 #+DATE: 2025-12-31
 
-#+PROPERTY: header-args:python :results output :exports results :eval yes
+#+PROPERTY: header-args:python :results output :session essen :exports results :eval yes
 
-* Introduction
-* Conclusion
 * Manual Preprocessing
 ** Imports
 
@@ -15,6 +13,7 @@ import numpy as np
 
 import os
 import re
+import shutil
 import zipfile
 import pathlib
 import random
@@ -197,7 +196,8 @@ Enconded through a scheme of upper and lower case letters:
 ** Essen Folksongs Data
 
 #+begin_src python :results silent
-ESSEN_ROOT = pathlib.Path("data/essen")
+ESSEN_ROOT = pathlib.Path("../data/essen")
+ESSEN_UNIQUE_ROOT = pathlib.Path("../data/essen_unique")
 
 ESSEN_REGIONS = ["europa", "asia", "africa", "america"]
 #+end_src
@@ -418,25 +418,31 @@ This function was mainly created to check whether all the files were available a
 for the next steps of the project. Based on our results, the files are readable and can be used
 for further processing. 
 
-#+begin_src python :results silent
-def iter_essen_files():
+#+begin_src python :results output
+def iter_essen_files(corpus: str):
     """
     Yield (path,) for every .krn file anywhere under data/essen.
     """
-    for path in ESSEN_ROOT.rglob("*.krn"):
-        yield path
+    if corpus == "essen":
+        for path in ESSEN_ROOT.rglob("*.krn"):
+            yield path
+    if corpus == "essen_unique":
+        for path in ESSEN_UNIQUE_ROOT.rglob("*.krn"):
+            yield path
 #+end_src
 
+#+RESULTS:
+
 #+begin_src python :results output
-files_seen = list(iter_essen_files())
+files_seen = list(iter_essen_files("essen"))
 print("Files seen:", len(files_seen))
 #+end_src
 
 #+RESULTS:
-: Files seen: 8472
+: Files seen: 8473
 
 #+begin_src python :results output
-for i, p in enumerate(iter_essen_files()):
+for i, p in enumerate(iter_essen_files("essen")):
     print(i, "->", p)
     if i == 9:
         break
@@ -444,16 +450,16 @@ for i, p in enumerate(iter_essen_files()):
 
 #+RESULTS:
 #+begin_example
-0 -> data/essen/europa/misc/island02.krn
-1 -> data/essen/europa/misc/steier01.krn
-2 -> data/essen/europa/misc/norge02.krn
-3 -> data/essen/europa/misc/island01.krn
-4 -> data/essen/europa/misc/ellas01.krn
-5 -> data/essen/europa/misc/steier03.krn
-6 -> data/essen/europa/misc/steier02.krn
-7 -> data/essen/europa/misc/norge01.krn
-8 -> data/essen/europa/misc/steier06.krn
-9 -> data/essen/europa/misc/emmenth1.krn
+0 -> ../data/essen/europa/misc/island02.krn
+1 -> ../data/essen/europa/misc/steier01.krn
+2 -> ../data/essen/europa/misc/norge02.krn
+3 -> ../data/essen/europa/misc/island01.krn
+4 -> ../data/essen/europa/misc/ellas01.krn
+5 -> ../data/essen/europa/misc/steier03.krn
+6 -> ../data/essen/europa/misc/steier02.krn
+7 -> ../data/essen/europa/misc/norge01.krn
+8 -> ../data/essen/europa/misc/steier06.krn
+9 -> ../data/essen/europa/misc/emmenth1.krn
 #+end_example
 
 
@@ -498,7 +504,7 @@ def load_kern_melody(path: pathlib.Path):
 
     return out
 
-test_path = pathlib.Path("data/essen/america/mexico/mexico02.krn")
+test_path = pathlib.Path("../data/essen/america/mexico/mexico01.krn")
 events = load_kern_melody(test_path)
 print("EVENTS:", len(events))
 for i, ev in enumerate(events[:10]):
@@ -507,17 +513,17 @@ for i, ev in enumerate(events[:10]):
 
 #+RESULTS:
 #+begin_example
-EVENTS: 88
-0 KernEvent(duration='8', pitch='r', is_rest=True)
+EVENTS: 67
+0 KernEvent(duration='8', pitch='c', is_rest=False)
 1 KernEvent(duration='8', pitch='c', is_rest=False)
 2 KernEvent(duration='8', pitch='c', is_rest=False)
-3 KernEvent(duration='8', pitch='c', is_rest=False)
-4 KernEvent(duration='8', pitch='f', is_rest=False)
-5 KernEvent(duration='4', pitch='r', is_rest=True)
-6 KernEvent(duration='8', pitch='a', is_rest=False)
-7 KernEvent(duration='8', pitch='r', is_rest=True)
-8 KernEvent(duration='8', pitch='c', is_rest=False)
-9 KernEvent(duration='8', pitch='c', is_rest=False)
+3 KernEvent(duration='4', pitch='f', is_rest=False)
+4 KernEvent(duration='8', pitch='a', is_rest=False)
+5 KernEvent(duration='8', pitch='c', is_rest=False)
+6 KernEvent(duration='8', pitch='c', is_rest=False)
+7 KernEvent(duration='8', pitch='c', is_rest=False)
+8 KernEvent(duration='4', pitch='f', is_rest=False)
+9 KernEvent(duration='2', pitch='a', is_rest=False)
 #+end_example
 
 Now, as the last step, we build the full clean corpus.
@@ -533,17 +539,14 @@ country and length of the melody.
 #+begin_src python :results silent
 MIN_EVENTS = 20
 
-def collect_clean_essen():
+def collect_clean_essen(corpus):
     melodies = []
     meta_list = []
 
-    for path in ESSEN_ROOT.rglob("*.krn"):
+    for path in corpus.rglob("*.krn"):
         events = load_kern_melody(path)
-        # if len(events) < MIN_EVENTS:
-        #     continue
-
         # derive continent/country from relative path
-        rel_parts = path.relative_to(ESSEN_ROOT).parts
+        rel_parts = path.relative_to(corpus).parts
         continent = rel_parts[0] if len(rel_parts) > 0 else "unknown"
         country = rel_parts[1] if len(rel_parts) > 1 else "unknown"
 
@@ -559,19 +562,12 @@ def collect_clean_essen():
 #+end_src
 
 #+begin_src python :results output
-melodies, meta = collect_clean_essen()
+melodies, meta = collect_clean_essen(ESSEN_ROOT)
 print("Number of melodies:", len(melodies))
 #+end_src
 
 #+RESULTS:
-: Number of melodies: 8472
-
-#+begin_src python :results output
-print(len(melodies[0]))
-#+end_src
-
-#+RESULTS:
-: 48
+: Number of melodies: 8473
 
 Let's inspect some of the melodies
 #+begin_src python :results output
@@ -582,26 +578,26 @@ for i in idxs:
 
 #+RESULTS:
 #+begin_example
-7312 asia china han0344.krn len: 40
-4743 europa deutschl deut395.krn len: 63
-3900 europa deutschl deut1029.krn len: 61
-6561 asia china shanx316.krn len: 34
-19 europa misc oberhas1.krn len: 116
-8409 asia china natmn081.krn len: 25
-3465 europa deutschl deut1236.krn len: 51
-5219 europa deutschl deut4411.krn len: 24
-1944 europa deutschl kindr123.krn len: 53
-6878 asia china shanx637.krn len: 67
-3717 europa deutschl deut0700.krn len: 49
-2578 europa deutschl deut4598.krn len: 40
-7155 asia china han0626.krn len: 101
-7101 asia china han0426.krn len: 45
-7886 asia china han0714.krn len: 185
-7890 asia china han0728.krn len: 18
-1611 europa deutschl deut2769.krn len: 37
-4718 europa deutschl deut221.krn len: 58
-7211 asia china han0031.krn len: 32
-1493 europa deutschl deut2685.krn len: 44
+8322 asia china natmn066.krn len: 101
+2137 europa deutschl deut3985.krn len: 94
+1050 europa deutschl deut2549.krn len: 72
+6780 asia china shanx479.krn len: 27
+8393 asia china natmn068.krn len: 32
+3663 europa deutschl deut0689.krn len: 42
+7621 asia china han1039.krn len: 120
+6366 asia china shanx228.krn len: 78
+2485 europa deutschl deut4945.krn len: 62
+3110 europa deutschl deut1903.krn len: 69
+635 europa deutschl deut3232.krn len: 36
+5740 europa nederlan neder044.krn len: 45
+1796 europa deutschl kindr210.krn len: 22
+3821 europa deutschl deut0718.krn len: 52
+395 europa deutschl deut3050.krn len: 29
+3384 europa deutschl deut1792.krn len: 113
+133 europa deutschl deut4206.krn len: 75
+8446 asia china natmn194.krn len: 44
+5717 europa nederlan neder016.krn len: 52
+6937 asia china shanx197.krn len: 32
 #+end_example
 
 #+begin_src python :results output
@@ -649,12 +645,12 @@ print(df_vp.sample(5))
 
 #+RESULTS:
 : (464343, 10)
-:             filename                                             path  ... duration is_rest
-: 427157   han0307.krn            data/essen/asia/china/han/han0307.krn  ...        4   False
-: 392226   han1016.krn            data/essen/asia/china/han/han1016.krn  ...        8   False
-: 206053  deut1213.krn      data/essen/europa/deutschl/erk/deut1213.krn  ...        4   False
-: 7219    deut4164.krn  data/essen/europa/deutschl/altdeu2/deut4164.krn  ...        4   False
-: 172631  deut1037.krn      data/essen/europa/deutschl/erk/deut1037.krn  ...        4   False
+:             filename                                            path continent   country  ...  position  pitch  duration is_rest
+: 154197  deut1041.krn  ../data/essen/europa/deutschl/erk/deut1041.krn    europa  deutschl  ...        38     ee         4   False
+: 288186  suisse30.krn       ../data/essen/europa/schweiz/suisse30.krn    europa   schweiz  ...         2     b-         4   False
+: 214618  deut1699.krn  ../data/essen/europa/deutschl/erk/deut1699.krn    europa  deutschl  ...        34      a         4   False
+: 244598   deut497.krn  ../data/essen/europa/deutschl/fink/deut497.krn    europa  deutschl  ...        17      c         8   False
+: 460570  natmn030.krn    ../data/essen/asia/china/natmin/natmn030.krn      asia     china  ...       193      a         8   False
 : 
 : [5 rows x 10 columns]
 
@@ -664,22 +660,22 @@ print(df_vp.head(15))
 
 #+RESULTS:
 #+begin_example
-        filename                                 path continent  ... pitch  duration  is_rest
-0   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     a        8.    False
-1   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b        16    False
-2   island02.krn  data/essen/europa/misc/island02.krn    europa  ...   ccn         8    False
-3   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b        8.    False
-4   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     a        16    False
-5   island02.krn  data/essen/europa/misc/island02.krn    europa  ...    g#         8    False
-6   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     a        8.    False
-7   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b        16    False
-8   island02.krn  data/essen/europa/misc/island02.krn    europa  ...   ccn         8    False
-9   island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b         4    False
-10  island02.krn  data/essen/europa/misc/island02.krn    europa  ...     r         8     True
-11  island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b         4    False
-12  island02.krn  data/essen/europa/misc/island02.krn    europa  ...     b         8    False
-13  island02.krn  data/essen/europa/misc/island02.krn    europa  ...   ccn         4    False
-14  island02.krn  data/essen/europa/misc/island02.krn    europa  ...    dd         8    False
+        filename                                    path continent country  ...  position  pitch  duration is_rest
+0   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         0      a        8.   False
+1   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         1      b        16   False
+2   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         2    ccn         8   False
+3   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         3      b        8.   False
+4   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         4      a        16   False
+5   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         5     g#         8   False
+6   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         6      a        8.   False
+7   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         7      b        16   False
+8   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         8    ccn         8   False
+9   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         9      b         4   False
+10  island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...        10      r         8    True
+11  island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...        11      b         4   False
+12  island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...        12      b         8   False
+13  island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...        13    ccn         4   False
+14  island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...        14     dd         8   False
 
 [15 rows x 10 columns]
 #+end_example
@@ -739,7 +735,7 @@ for mel_id, sig in melody_signatures.items():
 
 print("Original length of full dataframe:", len(df_dupe))
 print("How many melodies are duplicates of others:", len(exact_dupes))
-print("", len(keep_ids))
+print("How many unique melodies are in the corpus:", len(keep_ids))
 
 # pprint.pp(exact_dupes)
 
@@ -751,31 +747,24 @@ print(unique_melodies.sample(10))
 #+begin_example
 Original length of full dataframe: 8472
 How many melodies are duplicates of others: 269
- 8203
+How many unique melodies are in the corpus: 8203
 melody_id
-620     ((f, 4), (f, 4), (g, 4), (a, 4), (b-, 4), (cc,...
-1837    ((d, 8), (g, 8.), (a, 16), (b, 8), (cc, 8), (d...
-4941    ((d, 4), (g, 4.), (g, 8), (g, 4), (a, 4), (b, ...
-7524    ((f#, 8), (f#, 8), (a, 4), (b, 8), (f#, 16), (...
-2196    ((a, 2), (gn, 2.), (gn, 4), (a, 2.), (a, 4), (...
-3084    ((f, 4), (a, 4), (cc, 4), (b-, 4), (b-, 8), (e...
-8403    ((g, 8), (g, 4.), (g, 4), (d, 4), (g, 4), (e, ...
-1921    ((f, 4), (cc, 4), (cc, 4), (dd, 4), (dd, 4), (...
-4365    ((e, 8), (e, 8), (a, 8), (a, 8), (cc#, 8), (cc...
-640     ((d, 8), (g, 8), (g, 8), (b, 4.), (g, 8), (g, ...
+3832    ((d, 8), (b, 8), (g, 8), (dd, 8), (b, 8), (b, ...
+2605    ((f, 4), (b-, 2), (b-, 4), (f, 2), (ee-, 4), (...
+6714    ((ee, 8), (ee, 8), (b, 4), (dd, 8), (ff#, 4), ...
+6230    ((a, 4), (a, 4), (b, 4), (r, 4), (a, 4), (a, 4...
+7613    ((aa, 8.), (bb, 16), (eee, 8), (ccc#, 8), (bb,...
+4814    ((ee, 8), (cc#, 8), (a, 8), (b, 8), (g#, 8), (...
+517     ((c, 16), (e, 16), (g, 8), (a, 8), (g, 8), (d,...
+7308    ((dd, 8), (ee, 8), (dd, 8), (ee, 16), (ee, 16)...
+5861    ((G, 8), (c, 4), (e, 8), (f, 8), (e, 8), (c, 8...
+527     ((f, 4), (a, 4), (f, 4), (a, 8), (a, 8), (cc, ...
 Name: signatures, dtype: object
 #+end_example
 
 #+begin_src python :results output
-print(len(unique_melodies))
-#+end_src
-
-#+RESULTS:
-: 8203
-
-#+begin_src python :results output
 df_dupes = pd.DataFrame(exact_dupes)
-print(df_test.head())
+print(df_dupes.head())
 #+end_src
 
 #+RESULTS:
@@ -786,29 +775,63 @@ print(df_test.head())
 : 3          38            32
 : 4          39            37
 
-We can check now to which melodies each duplicate id corresponds to and drop them to avoid any biases
-when training IDyOM and our Transformer. 
 #+begin_src python :results output
-df_paths = df_vp[["filename", "path", "melody_id"]].drop_duplicates()
+df_tryout = (df_vp.sort_values(by=["melody_id", "position"])
+                   .groupby("melody_id")["pitch"]
+                   .apply(list))
 
-duplicate_paths = df_dupes.merge(df_paths, left_on="removed_id", right_on="melody_id", how="inner")
-
-paths_removed = duplicate_paths["path"].to_list()
+df_tryout = pd.DataFrame({"melody_id": df_tryout.index, "pitch":df_tryout.values})
+print(df_tryout[df_tryout["melody_id"] == 32])
+print(df_tryout[df_tryout["melody_id"] == 34])
+print(df_tryout[df_tryout["melody_id"] == 35])
 #+end_src
 
 #+RESULTS:
+:     melody_id                                              pitch
+: 32         32  [B, e, f#, gn, f#, e, b, f#, a, gn, f#, e, d#,...
+:     melody_id                                              pitch
+: 34         34  [B, e, f#, gn, f#, e, b, f#, a, gn, f#, e, d#,...
+:     melody_id                                              pitch
+: 35         35  [B, e, f#, gn, f#, e, b, f#, a, gn, f#, e, d#,...
 
-#+begin_src python :results silent
-for path in paths_removed:
-  os.remove(path)
+
+We can check now to which melodies each duplicate id corresponds to and drop them to avoid any biases
+when training IDyOM and our Transformer.
+
+#+begin_src python :results output
+src_root = Path("../data/essen")
+dst_root = Path("../data/essen_unique")
+
+df_paths = df_vp[["filename", "path", "melody_id"]].drop_duplicates()
+duplicate_ids = df_dupes["removed_id"].tolist()
+unique_ids = df_paths[~df_paths["melody_id"].isin(duplicate_ids)]
+
+
+for _, row in unique_ids.iterrows():
+    src = row["path"]
+    rel = Path(row["path"]).relative_to("../data/essen")
+    dst = dst_root / rel
+    
+    # Create parent directories preserving structure
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+
+print(f"Copied {len(unique_ids)} files to {dst_root}")
+print(f"Original: {len(df_paths)} | Duplicates: {len(duplicate_ids)} | Kept: {len(unique_ids)}")
 #+end_src
+
+#+RESULTS:
+: Copied 8203 files to ../data/essen_unique
+: Original: 8472 | Duplicates: 269 | Kept: 8203
 
 Let's check whether the amount of files in our corpus has now changed:
 #+begin_src python :results output
-print(len(list(iter_essen_files())))
+print(len(list(iter_essen_files("essen"))))
+print(len(list(iter_essen_files("essen_unique"))))
 #+end_src
 
 #+RESULTS:
+: 8473
 : 8203
 
 Which is exactly 8472 - 269, all the duplicate files have been removed. We can now add the final
@@ -836,7 +859,7 @@ Finally, we get rid of the barlines, as explained before, they offer no musical 
 are just structural separators that do not bring meaninful information for future modelling. 
 
 #+begin_src bash :results output
-rid -GLI data/essen/europa/misc/island02.krn \
+rid -GLI ../data/essen_unique/america/usa/usa02.krn \
   | awk -F'\t' '{print $1}' \
   | grep -v '^=' \
   > /tmp/island02.tokens
@@ -846,55 +869,55 @@ head -n 20 /tmp/island02.tokens
 
 #+RESULTS:
 #+begin_example
-{8.a
-16b
-8ccn
-8.b
-16a
-8g#
-8.a
-16b
-8ccn
-4b
-8r}
-{4b
+{8g
 8b
-4ccn
+8b
+8b
+4b
+8a
+8g
+8g
+8a
+4g}
+{8g
+8b
 8dd
-4.ee
+8dd
 4dd
-8r}
-{4ccn
-8ccn
+8dd
+8cc
+8a
+8a
+4b}
 #+end_example
 
 ** Validation
 
 #+begin_src bash :results output
-find data/essen -type f \( -name "*.krn" -o -name "*.kern" \) | sort > essen_files.txt
+find ../data/essen_unique -type f \( -name "*.krn" -o -name "*.kern" \) | sort > essen_files.txt
 wc -l essen_files.txt
 #+end_src
 
 #+RESULTS:
-:     8472 essen_files.txt
+:     8203 essen_files.txt
 
 #+begin_src bash :results output
-mkdir -p audit/logs
+mkdir -p ../audit/logs
 
 while read -r f; do
   base=$(basename "$f")
-  mint "$f" >audit/logs/"$base".out 2>audit/logs/"$base".err
-  echo "$?,${f}" >> audit/validator_exitcodes.csv
+  mint "$f" >../audit/logs/"$base".out 2>../audit/logs/"$base".err
+  echo "$?,${f}" >> ../audit/validator_exitcodes.csv
 done < essen_files.txt
 #+end_src
 
 #+RESULTS:
 
 #+begin_src bash :results output
-rid -GLI data/essen/europa/misc/island01.krn | extract -i '**kern' > out 2> err
+rid -GLI ../data/essen_unique/europa/misc/island01.krn | extract -i '**kern' > out 2> err
 status=$?
 
-echo "$status,$f" >> audit/extract_exitcodes.csv
+echo "$status,$f" >> ../audit/extract_exitcodes.csv
 #+end_src
 
 #+RESULTS:
@@ -914,8 +937,8 @@ would be useless for our model.
 In this case, we a file is flagged if all non-bar tokens are rests (r) or empty.
 
 #+begin_src bash :results output
-rm -f audit/no_pitched_notes.csv
-: > audit/no_pitched_notes.csv
+rm -f ../audit/no_pitched_notes.csv
+: > ../audit/no_pitched_notes.csv
 
 while IFS= read -r f; do
   f="${f%$'\r'}"   # guard against CRLF
@@ -928,7 +951,7 @@ while IFS= read -r f; do
   fi
 done < essen_files.txt
 
-wc -l audit/no_pitched_notes.csv
+wc -l ../audit/no_pitched_notes.csv
 #+end_src
 
 #+RESULTS:
@@ -939,34 +962,31 @@ contained commas after each note, and cleaning for elements that do not express 
 We conduct a similar cleaning process as what was done with =load_kern_melody=. However, in this case we
 want to make sure that all the files contain actual pitch representations to avoid using invalid melodies.
 
-The final result gives us one single file. Let's inspect it and see what seems to be the issue and whether
-it is worthy to keep it or remove it from the corpus. 
+The final result (before removing duplicates) gave us one single file. I inspected it to observe what was
+the issue and whether it was worthy to keep it or remove it from the corpus. 
 
 #+begin_src bash :results output
-extract -i '**kern' data/essen/asia/china/han/han0953.krn | head -n 30
+extract -i '**kern' ../data/essen/asia/china/han/han0953.krn | head -n 30
 #+end_src
-
-#+RESULTS:
 
 Nothing seems to be returned, we can take a look into it with =load_kern_melody= and inspect whether the
 events are null or actuall appear. 
 
 #+begin_src python :results output
-events = load_kern_melody(pathlib.Path("data/essen/asia/china/han/han0953.krn"))
+events = load_kern_melody(pathlib.Path("../data/essen/asia/china/han/han0953.krn"))
 print("EVENTS:", len(events))
 #+end_src
 
-We see that this file is empty, just contains commentsm interpretations and editoral marks,
-elements that do not symbolize musical events, and therefore not important for our research.
+#+RESULTS:
+: EVENTS: 0
 
-#+begin_src python :results output
-os.remove(pathlib.Path("data/essen/asia/china/han/han0953.krn"))
-#+end_src
+We see that this file was empty, just contains commentsm interpretations and editoral marks,
+elements that do not symbolize musical events, and therefore not important for our research.
 
 *** Duration
 #+begin_src bash :results output
-rm -f audit/missing_duration.csv
-: > audit/missing_duration.csv
+rm -f ../audit/missing_duration.csv
+: > ../audit/missing_duration.csv
 
 while IFS= read -r f; do
   f="${f%$'\r'}"
@@ -978,11 +998,11 @@ while IFS= read -r f; do
     | sed -E 's/[}\]]+$//' \
     | grep -Ev '^[0-9]' \
     | grep -q .; then
-    echo "$f" >> audit/missing_duration.csv
+    echo "$f" >> ../audit/missing_duration.csv
   fi
 done < essen_files.txt
 
-wc -l audit/missing_duration.csv
+wc -l ../audit/missing_duration.csv
 #+end_src
 
 #+RESULTS:
@@ -995,15 +1015,15 @@ analysis.
 
 *** Structural integrity
 #+begin_src bash :results output
-> audit/extract_fail.csv
+> ../audit/extract_fail.csv
 
 while read -r f; do
   if ! rid -GLI "$f" | extract -i '**kern' > /dev/null 2>&1; then
-    echo "$f" >> audit/extract_fail.csv
+    echo "$f" >> ../audit/extract_fail.csv
   fi
 done < essen_files.txt
 
-wc -l audit/extract_fail.csv
+wc -l ../audit/extract_fail.csv
 #+end_src
 
 #+RESULTS:
@@ -1021,7 +1041,7 @@ about our data.
 *** Intervals
 The function =mint= looks into the melodic intervals of each song
 #+begin_src bash :results output
-mint data/essen/america/mexico/mexico02.krn | grep -v '^[!*]' | head -n 10
+mint ../data/essen/america/mexico/mexico02.krn | grep -v '^[!*]' | head -n 10
 #+end_src
 
 #+RESULTS:
@@ -1041,7 +1061,7 @@ r
 We can obtain a bit more of information on it with the count of the occurrance of each interval.
 
 #+begin_src bash :results output
-mint data/essen/america/mexico/mexico02.krn | grep -v '^[!=*]' | sort | uniq -c 
+mint ../data/essen/america/mexico/mexico02.krn | grep -v '^[!=*]' | sort | uniq -c 
 #+end_src
 
 #+RESULTS:
@@ -1094,20 +1114,20 @@ concatenating them all together, =mint= is called individually for each melody i
 #+begin_src bash :results output
 while IFS= read -r f; do
   f="${f%$'\r'}"
-  continent=$(echo "$f" | awk -F'/' '{print $3}')
+  continent=$(echo "$f" | awk -F'/' '{print $4}')
   mint "$f" 2>/dev/null \
     | rid -GLId \
     | sed 's/[{}()]//g' \
     | grep -Ev '^(r|$)' \
     | sed "s/^/${continent},/"
-done < essen_files.txt > audit/mint_by_continent.csv
+done < essen_files.txt > ../audit/mint_by_continent.csv
 #+end_src
 
 #+RESULTS:
 
 #+begin_src python :results output
 df_int = pd.read_csv(
-    "audit/mint_by_continent.csv",
+    "../audit/mint_by_continent.csv",
     header=None,
     names=["continent", "interval"]
 )
@@ -1126,13 +1146,13 @@ print(df_int)
 4         africa      +m2
 5         africa      +M2
 ...          ...      ...
-574202    europa      -m3
-574203    europa       P1
-574204    europa      -M2
-574205    europa      -m2
-574207    europa      +m2
+555799    europa      -m3
+555800    europa       P1
+555801    europa      -M2
+555802    europa      -m2
+555804    europa      +m2
 
-[447000 rows x 2 columns]
+[432689 rows x 2 columns]
 #+end_example
 
 Throughout the corpus it still seems that small pitch intervals are the most occurrent in this corpus.
@@ -1152,21 +1172,21 @@ africa    -m2          27
           P1           23
           +M2          21
           -M2          20
-america   P1          180
-          -M2         115
-          +M2          65
-          +M3          54
-          +m3          46
-asia      -M2       32025
-          +M2       24064
-          P1        22413
-          -m3       17443
-          +m3       14695
-europa    P1        64186
-          -M2       61806
-          +M2       39461
-          -m2       24952
-          +m2       18572
+america   P1          140
+          -M2          92
+          +M2          56
+          +M3          42
+          +P4          34
+asia      -M2       31697
+          +M2       23738
+          P1        22167
+          -m3       17256
+          +m3       14501
+europa    P1        61574
+          -M2       59181
+          +M2       37901
+          -m2       23963
+          +m2       17888
 #+end_example
 
 This shows the top 5 more repeated intervals per continent. As expected, the most common are very small intervals,
@@ -1234,7 +1254,7 @@ The key intuition: the greatest information content (lowest probability) is asso
 while the lowest information content (highest probability) is associated with the most common tokens. 
 
 #+begin_src bash :results output
-infot -b -x ^= data/essen/america/mexico/mexico01.krn
+infot -b -x ^= ../data/essen/america/mexico/mexico03.krn
 #+end_src
 
 #+RESULTS:
@@ -1277,13 +1297,13 @@ while IFS= read -r f; do
   if [ -n "$result" ]; then
     echo "$f,$result"
   fi
-done < essen_files.txt > audit/infot_intervals.csv
+done < essen_files.txt > ../audit/infot_intervals.csv
 #+end_src
 
 #+RESULTS:
 
 #+begin_src bash :results output
-head -10 audit/infot_intervals.csv
+head -10 ../audit/infot_intervals.csv
 #+end_src
 
 #+RESULTS:
@@ -1301,6 +1321,50 @@ data/essen/america/usa/usa03.krn,5.4544
 #+end_example
 
 * Preparing final data structure for training
+** DataFrame with only unique melodies
+
+#+begin_src python :results output
+unique_melodies, unique_meta = collect_clean_essen(ESSEN_UNIQUE_ROOT)
+print("Number of melodies:", len(unique_melodies))
+#+end_src
+
+#+RESULTS:
+: Number of melodies: 8203
+
+#+begin_src python :results output
+df_events = []
+for i, (events, m) in enumerate(zip(unique_melodies, unique_meta)):
+    for j, ev in enumerate(events):
+        row = m.copy()
+        row.update({
+            'melody_id': i,
+            'position': j,
+            'pitch': ev.pitch,
+            'duration': ev.duration,
+            'is_rest': ev.is_rest
+        })
+        df_events.append(row)
+
+df_unique = pd.DataFrame(df_events)
+print(df_unique.shape)
+print(df_unique.sample(5))
+#+end_src
+
+#+RESULTS:
+: (449328, 10)
+:            filename                                               path continent  ... pitch  duration  is_rest
+: 400774  han0857.krn    ../data/essen_unique/asia/china/han/han0857.krn      asia  ...     g         8    False
+: 372947  han0294.krn    ../data/essen_unique/asia/china/han/han0294.krn      asia  ...    gg        8.    False
+: 254584  deut100.krn  ../data/essen_unique/europa/deutschl/fink/deut...    europa  ...     G         8    False
+: 291649   ussr32.krn     ../data/essen_unique/europa/rossiya/ussr32.krn    europa  ...     b         8    False
+: 421270  han0388.krn    ../data/essen_unique/asia/china/han/han0388.krn      asia  ...    dd        16    False
+: 
+: [5 rows x 10 columns]
+
+#+begin_src python :results output
+
+#+end_src
+
 ** Pitch representation
 
 We will start with focusing on the pitch as the basic viewpoint to take into consideration
@@ -1319,7 +1383,7 @@ kern file into a midi file:
 #+begin_src python :results output
 from music21 import converter
 
-score = converter.parse("data/essen/europa/misc/island02.krn")
+score = converter.parse("../data/essen/europa/misc/island02.krn")
 
 score.write("midi", fp="island02.midi")
 #+end_src
@@ -1379,7 +1443,7 @@ def kern_to_midi(k_pitch):
 #+RESULTS:
 
 #+begin_src python :results output
-df_notes = df_vp[df_vp["is_rest"] == False].drop(["is_rest"], axis=1).copy()
+df_notes = df_unique[df_unique["is_rest"] == False].drop(["is_rest"], axis=1).copy()
 df_notes["midi_pitch"] = df_notes["pitch"].apply(kern_to_midi)
 #+end_src
 
@@ -1391,17 +1455,17 @@ print(df_notes.sample(10))
 
 #+RESULTS:
 #+begin_example
-            filename                                              path  ... duration midi_pitch
-253054   deut517.krn       data/essen/europa/deutschl/fink/deut517.krn  ...        8         62
-249088   deut122.krn       data/essen/europa/deutschl/fink/deut122.krn  ...        8         71
-274511  deut3669.krn  data/essen/europa/deutschl/allerkbd/deut3669.krn  ...        8         76
-372739   han0420.krn             data/essen/asia/china/han/han0420.krn  ...       16         69
-197372  deut1767.krn       data/essen/europa/deutschl/erk/deut1767.krn  ...        4         72
-399653   han0912.krn             data/essen/asia/china/han/han0912.krn  ...       4.         66
-1949    deut5150.krn      data/essen/europa/deutschl/test/deut5150.krn  ...        8         62
-312589  oestr076.krn           data/essen/europa/oesterrh/oestr076.krn  ...        8         69
-322340  shanx148.krn         data/essen/asia/china/shanxi/shanx148.krn  ...        8         70
-418382   han0265.krn             data/essen/asia/china/han/han0265.krn  ...        4         74
+            filename                                               path continent  ... pitch  duration  midi_pitch
+199641  deut0861.krn  ../data/essen_unique/europa/deutschl/erk/deut0...    europa  ...    cc         8          72
+269186  deut4434.krn  ../data/essen_unique/europa/deutschl/dva/deut4...    europa  ...     b         8          71
+218921  deut1103.krn  ../data/essen_unique/europa/deutschl/erk/deut1...    europa  ...    b-         8          70
+161756  deut1442.krn  ../data/essen_unique/europa/deutschl/erk/deut1...    europa  ...     d         4          62
+30333   deut3391.krn  ../data/essen_unique/europa/deutschl/ballad/de...    europa  ...     a         4          69
+147022  deut4726.krn  ../data/essen_unique/europa/deutschl/zuccal/de...    europa  ...     b         8          71
+30370   deut3385.krn  ../data/essen_unique/europa/deutschl/ballad/de...    europa  ...    b-         4          70
+77345   deut2863.krn  ../data/essen_unique/europa/deutschl/boehme/de...    europa  ...     d         8          62
+424216   han0202.krn    ../data/essen_unique/asia/china/han/han0202.krn      asia  ...     b         8          71
+67155   deut2523.krn  ../data/essen_unique/europa/deutschl/boehme/de...    europa  ...     b        4.          71
 
 [10 rows x 10 columns]
 #+end_example
@@ -1470,17 +1534,17 @@ print(xinhua.head(10))
 
 #+RESULTS:
 #+begin_example
-           filename                                      path  ... duration midi_pitch
-355683  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        4         60
-355684  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        8         74
-355685  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        8         67
-355686  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        4         60
-355687  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        8         76
-355688  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        8         67
-355689  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        4         60
-355690  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        4         79
-355691  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        2         79
-355692  china01.krn  data/essen/asia/china/xinhua/china01.krn  ...        4         60
+           filename                                               path continent  ... pitch  duration  midi_pitch
+342330  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     c         4          60
+342331  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...    dd         8          74
+342332  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     g         8          67
+342333  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     c         4          60
+342334  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...    ee         8          76
+342335  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     g         8          67
+342336  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     c         4          60
+342337  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...    gg         4          79
+342338  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...    gg         2          79
+342339  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     c         4          60
 
 [10 rows x 10 columns]
 #+end_example
@@ -1496,41 +1560,54 @@ unique_melodies = (df_notes.sort_values(by=["melody_id", "position"])
                    .groupby("melody_id")["midi_pitch"]
                    .apply(list))
 
-unique_melodies = unique_melodies[keep_ids]
 unique_melodies = pd.DataFrame({"melody_id": unique_melodies.index, "pitch":unique_melodies.values})
 print(unique_melodies.sample(10))
-unique_melodies.to_csv("data/unique_melodies.csv")
+unique_melodies.to_csv("../data/unique_melodies.csv", index=False)
 #+end_src
 
 #+RESULTS:
 #+begin_example
       melody_id                                              pitch
-2145       2158  [60, 62, 64, 60, 65, 64, 62, 60, 62, 60, 67, 6...
-4018       4048  [72, 70, 72, 69, 67, 65, 70, 72, 69, 67, 65, 6...
-190         197  [65, 65, 69, 67, 65, 67, 67, 69, 65, 69, 70, 7...
-7784       8045  [69, 69, 67, 69, 72, 77, 74, 74, 72, 69, 72, 7...
-4740       4773  [62, 71, 71, 71, 69, 69, 69, 72, 71, 69, 69, 7...
-743         750  [65, 62, 65, 70, 62, 65, 70, 74, 70, 74, 72, 7...
-2228       2241  [65, 65, 65, 69, 69, 72, 72, 69, 72, 72, 72, 7...
-2152       2165  [65, 65, 65, 69, 65, 69, 70, 72, 72, 69, 74, 7...
-5898       6144  [71, 71, 71, 72, 71, 72, 74, 71, 67, 71, 71, 7...
-1641       1654  [67, 67, 70, 67, 67, 65, 63, 65, 67, 63, 67, 6...
+6093       6093  [71, 71, 69, 67, 69, 71, 74, 76, 74, 71, 69, 7...
+3320       3320  [62, 62, 60, 59, 62, 67, 71, 71, 71, 71, 74, 7...
+2427       2427  [64, 64, 68, 69, 71, 66, 69, 68, 66, 64, 76, 7...
+4627       4627  [70, 77, 74, 75, 72, 74, 72, 70, 74, 72, 74, 7...
+4897       4897  [60, 59, 57, 55, 53, 52, 53, 55, 52, 48, 60, 5...
+1876       1876  [72, 72, 69, 74, 72, 72, 69, 69, 72, 72, 74, 7...
+2563       2563  [67, 62, 62, 59, 62, 67, 67, 67, 71, 71, 69, 7...
+4242       4242  [67, 66, 64, 66, 67, 69, 66, 62, 67, 67, 66, 6...
+1101       1101  [67, 66, 67, 74, 72, 74, 75, 72, 74, 70, 69, 7...
+7977       7977  [69, 69, 71, 69, 71, 73, 76, 73, 71, 73, 73, 7...
 #+end_example
 
-Checking into the melodies that were flagged as duplicated
+We'll make two csv files, one with the paths and the filename so that when it comes to splitting the data later on
+based on training, validation and test sets, we can feed the same melodies to IDyOM and that way have the most accurate
+comparison of IC values depending on the experiment we are carrying out. 
+
 #+begin_src python :results output
-print(unique_melodies[unique_melodies["melody_id"] == 32])
-print(unique_melodies[unique_melodies["melody_id"] == 34])
-print(unique_melodies[unique_melodies["melody_id"] == 35])
+melody_meta = df_notes.groupby("melody_id")[["filename", "path"]].first()
+unique_melodies_meta = unique_melodies.merge(melody_meta, on="melody_id")
+
+print(unique_melodies_meta.sample(10))
+unique_melodies_meta.to_csv("../data/meta_unique_melodies.csv", index=False)
 #+end_src
 
 #+RESULTS:
-:     melody_id                                              pitch
-: 32         32  [59, 64, 66, 67, 66, 64, 71, 66, 69, 67, 66, 6...
-:     melody_id                                              pitch
-: 34         34  [59, 64, 66, 67, 66, 64, 71, 66, 69, 67, 66, 6...
-:     melody_id                                              pitch
-: 35         35  [59, 64, 66, 67, 66, 64, 71, 66, 69, 67, 66, 6...
+#+begin_example
+      melody_id  ...                                               path
+1038       1038  ...  ../data/essen_unique/europa/deutschl/boehme/de...
+6143       6143  ...  ../data/essen_unique/asia/china/shanxi/shanx60...
+1275       1275  ...  ../data/essen_unique/europa/deutschl/boehme/de...
+1664       1664  ...  ../data/essen_unique/europa/deutschl/boehme/de...
+1286       1286  ...  ../data/essen_unique/europa/deutschl/boehme/de...
+399         399  ...  ../data/essen_unique/europa/deutschl/ballad/de...
+7486       7486  ...    ../data/essen_unique/asia/china/han/han0935.krn
+6904       6904  ...    ../data/essen_unique/asia/china/han/han0140.krn
+7726       7726  ...    ../data/essen_unique/asia/china/han/han1056.krn
+6626       6626  ...  ../data/essen_unique/asia/china/shanxi/shanx17...
+
+[10 rows x 4 columns]
+#+end_example
 
 * EDA
 ** Melody inspection
@@ -1542,13 +1619,13 @@ Based on the results with python and Humdrum tools, all of our melodies are mono
 makes the processing much easier. 
 
 #+begin_src bash :results output
-find data/essen -name "*.krn" | while read f; do
+find ../data/essen -name "*.krn" | while read f; do
   grep -m 1 '^\*\*' "$f" | awk -F'\t' '{print NF}'
 done | sort | uniq -c
 #+end_src
 
 #+RESULTS:
-: 8473 1
+: 8204 1
 
 #+begin_src python :results output
 voice_counts = {}
@@ -1566,7 +1643,7 @@ for k in sorted(voice_counts):
 #+end_src
 
 #+RESULTS:
-: 1 voices: 8472 files
+: 1 voices: 8204 files
 
 Both the Humdrum tools and our manual Python inspection show that we just have monophonic music, which makes
 the whole process much easier.
@@ -1662,17 +1739,17 @@ print(key_df.sample(10))
 
 #+RESULTS:
 #+begin_example
-                                                 path tonic key_signature
-8364           data/essen/europa/schweiz/suisse23.krn   *G:        *k[f#]
-2840  data/essen/europa/deutschl/altdeu2/deut4191.krn   *D:      *k[f#c#]
-734             data/essen/asia/china/han/han0659.krn   *G:        *k[f#]
-4684      data/essen/europa/deutschl/erk/deut0707.krn   *F:        *k[b-]
-741             data/essen/asia/china/han/han0666.krn  *B-:      *k[b-e-]
-2611  data/essen/europa/deutschl/altdeu1/deut3962.krn   *F:        *k[b-]
-4013   data/essen/europa/deutschl/boehme/deut2551.krn   *G:        *k[f#]
-3776   data/essen/europa/deutschl/boehme/deut2314.krn   *G:        *k[f#]
-1876        data/essen/asia/china/shanxi/shanx434.krn   *D:      *k[f#c#]
-1065            data/essen/asia/china/han/han0990.krn  *B-:      *k[b-e-]
+                                                   path tonic key_signature
+4535     ../data/essen/europa/deutschl/erk/deut0702.krn   *G:        *k[f#]
+3327  ../data/essen/europa/deutschl/ballad/deut3390.krn   *G:        *k[f#]
+2968  ../data/essen/europa/deutschl/ballad/deut3028.krn   *d:        *k[b-]
+3316  ../data/essen/europa/deutschl/ballad/deut3378.krn   *G:        *k[f#]
+3870  ../data/essen/europa/deutschl/boehme/deut2545.krn   *G:        *k[f#]
+793            ../data/essen/asia/china/han/han0729.krn   *F:        *k[b-]
+4916     ../data/essen/europa/deutschl/erk/deut1086.krn   *C:          *k[]
+5491     ../data/essen/europa/deutschl/erk/deut1663.krn   *F:        *k[b-]
+1743       ../data/essen/asia/china/shanxi/shanx320.krn  *B-:      *k[b-e-]
+6548     ../data/essen/europa/deutschl/fink/deut457.krn   *F:        *k[b-]
 #+end_example
 
 #+begin_src bash :results output
@@ -1704,7 +1781,7 @@ found in the essen folder and extracts the mentioned key values. Once all the va
 these are stored into a csv file. 
 
 #+begin_src bash :results output
-find ESSEN_ROOT -name "*.krn" | while read f; do
+find ../data/essen/ -name "*.krn" | while read f; do
     key "$f" | awk -v file="$f" '
         /Estimated key:/ {
             key=$3" "$4
@@ -1745,12 +1822,12 @@ print(df_keys.head())
 
 #+RESULTS:
 : Index(['path', 'key', 'r', 'confidence'], dtype='object')
-:                                   path      key       r  confidence
-: 0  data/essen/europa/misc/island02.krn  A minor  0.6230        42.6
-: 1  data/essen/europa/misc/steier01.krn  G major  0.8366         9.3
-: 2   data/essen/europa/misc/norge02.krn  G minor  0.7823        45.3
-: 3  data/essen/europa/misc/island01.krn  C major  0.7082        34.9
-: 4   data/essen/europa/misc/ellas01.krn  G major  0.4829         6.1
+:                                      path      key       r  confidence
+: 0  ../data/essen/europa/misc/island02.krn  A minor  0.6230        42.6
+: 1  ../data/essen/europa/misc/steier01.krn  G major  0.8366         9.3
+: 2   ../data/essen/europa/misc/norge02.krn  G minor  0.7823        45.3
+: 3  ../data/essen/europa/misc/island01.krn  C major  0.7082        34.9
+: 4   ../data/essen/europa/misc/ellas01.krn  G major  0.4829         6.1
 
 #+begin_src python :results output
 df_keys["mode"] = df_keys["key"].str.contains("minor").map(
@@ -1763,18 +1840,18 @@ df_keys["tonic"] = (
     .str.replace(" minor", "", regex=False)
 )
 
-df_keys["continent"] = df_keys["path"].apply(lambda p: p.split("/")[2])
+df_keys["continent"] = df_keys["path"].apply(lambda p: p.split("/")[3])
 
 print(df_keys.head())
 #+end_src
 
 #+RESULTS:
-:                                   path      key       r  confidence   mode tonic continent
-: 0  data/essen/europa/misc/island02.krn  A minor  0.6230        42.6  minor     A    europa
-: 1  data/essen/europa/misc/steier01.krn  G major  0.8366         9.3  major     G    europa
-: 2   data/essen/europa/misc/norge02.krn  G minor  0.7823        45.3  minor     G    europa
-: 3  data/essen/europa/misc/island01.krn  C major  0.7082        34.9  major     C    europa
-: 4   data/essen/europa/misc/ellas01.krn  G major  0.4829         6.1  major     G    europa
+:                                      path      key       r  confidence   mode tonic continent
+: 0  ../data/essen/europa/misc/island02.krn  A minor  0.6230        42.6  minor     A    europa
+: 1  ../data/essen/europa/misc/steier01.krn  G major  0.8366         9.3  major     G    europa
+: 2   ../data/essen/europa/misc/norge02.krn  G minor  0.7823        45.3  minor     G    europa
+: 3  ../data/essen/europa/misc/island01.krn  C major  0.7082        34.9  major     C    europa
+: 4   ../data/essen/europa/misc/ellas01.krn  G major  0.4829         6.1  major     G    europa
 
 #+begin_src python :results silent
 df_keys.to_csv("estimated_keys.csv", index=False)
@@ -1796,12 +1873,12 @@ print(tab_prop)
 : mode          major     minor
 : continent                    
 : africa     0.000000  1.000000
-: america    0.923077  0.076923
-: asia       0.755011  0.244989
-: europa     0.750845  0.249155
+: america    0.909091  0.090909
+: asia       0.755615  0.244385
+: europa     0.750545  0.249455
 
 *** Visual representation
-#+begin_src python :results file graphics :file major_minor_proportion.png
+#+begin_src python :results file graphics :file major_minor_proportion.png :exports both
 ax = tab_prop.plot(
     kind="bar",
     stacked=True,
@@ -1821,7 +1898,7 @@ plt.close()
 #+RESULTS:
 [[file:major_minor_proportion.png]]
 
-#+begin_src python :results file graphics :file tonic.png
+#+begin_src python :results file graphics :file tonic.png :exports both
 df_keys["tonic"].value_counts().head(10).plot(kind="bar")
 plt.title("Most common tonal centers")
 
@@ -1830,8 +1907,7 @@ plt.close()
 #+end_src
 
 #+RESULTS:
-[[file:tonic.
-png]]
+[[file:tonic.png]]
 
 ** Graphs
 #+begin_src python :results output
@@ -1845,11 +1921,11 @@ print(continent_counts)
 #+end_src
 
 #+RESULTS:
-: Counter({'europa': 6213, 'asia': 2245, 'america': 13, 'africa': 1})
+: Counter({'essen': 8204})
 
 *** Melody Length Distribution
 
-#+begin_src python :results file graphics :file melody_lengths.png
+#+begin_src python :results file graphics :file melody_lengths.png :exports both
 files = sorted(ESSEN_ROOT.rglob("*.krn"))
 lengths = [len(load_kern_melody(f)) for f in files]
 
@@ -1885,7 +1961,7 @@ pitch_counter.most_common(20)
 #+RESULTS:
 : Unique pitches: 114
 
-#+begin_src python :results file graphics :file pitch_freq.png
+#+begin_src python :results file graphics :file pitch_freq.png :exports both
 # plt.figure(figsize=(10,4))
 # labels, values = zip(*pitch_counter.most_common(30))
 # plt.bar(labels, values)
@@ -1916,7 +1992,7 @@ plt.close()
 [[file:pitch_freq.png]]
 
 *** Rhythmic Duration Frequency
-#+begin_src python :results file graphics :file rhythm_freq.png
+#+begin_src python :results file graphics :file rhythm_freq.png :exports both
 dur_counter = Counter()
 
 for f in files:
@@ -1949,7 +2025,7 @@ plt.close()
 #+RESULTS:
 [[file:rhythm_freq.png]]
 
-#+begin_src python :results file graphics :file rhythm_by_continent.png
+#+begin_src python :results file graphics :file rhythm_by_continent.png :exports both
 rows = []
 
 for f in files:
@@ -1986,7 +2062,7 @@ plt.close()
 [[file:rhythm_by_continent.png]]
 
 
-#+begin_src python :results file graphics :file rhythm_norm_continent.png
+#+begin_src python :results file graphics :file rhythm_norm_continent.png :exports both
 
 # TODO: Change to log
 
@@ -2020,7 +2096,7 @@ plt.close()
 [[file:rhythm_norm_continent.png]]
 
 *** Pitch Intervals per Continent
-#+begin_src python :results file graphics :file interval_by_continent.png
+#+begin_src python :results file graphics :file interval_by_continent.png :exports both
 df_top = (
     df_int
     .groupby("continent")["interval"]
@@ -2060,7 +2136,7 @@ plt.close()
 
 *** Pitch Interval Frequency
 
-#+begin_src python :results output
+#+begin_src python :results output 
 def get_intervals(df):
     intervals_data = []
     for mel_id, group in df.sort_values(by=["melody_id", "position"]).groupby("melody_id"):
@@ -2090,18 +2166,18 @@ print(df_intervals)
 3               0        -2    europa
 4               0        -1    europa
 ...           ...       ...       ...
-424481       8471         0    africa
-424482       8471        -2    africa
-424483       8471         0    africa
-424484       8471        -1    africa
-424485       8471         1    africa
+424481       8472         0    africa
+424482       8472        -2    africa
+424483       8472         0    africa
+424484       8472        -1    africa
+424485       8472         1    africa
 
 [424486 rows x 3 columns]
 #+end_example
 
 *** Interval Distribution
 
-#+begin_src python :results file graphics :file interval_distribution.png
+#+begin_src python :results file graphics :file interval_distribution.png :exports both
 # Pitch interval distribution
 fig, axes = plt.subplots(1, 2, figsize=(14, 5))
 
@@ -2132,7 +2208,7 @@ plt.close()
 [[file:interval_distribution.png]]
 
 *** Bigram Notes Transition Heatmap
-#+begin_src python :results file graphics :file bigram_heatmap.png
+#+begin_src python :results file graphics :file bigram_heatmap.png :exports both
 # Bigram transition heatmap (pitch class)
 pitch_class_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 
@@ -2171,7 +2247,7 @@ plt.close()
 [[file:bigram_heatmap.png]]
 
 *** Melody Length Distribution
-#+begin_src python :results file graphics :file melody_length_distribution.png
+#+begin_src python :results file graphics :file melody_length_distribution.png :exports both
 # Melody length distribution with max_len cutoff
 max_len = 128
 lengths = ids.groupby("melody_id")["position"].count()

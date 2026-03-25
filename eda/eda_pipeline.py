@@ -217,7 +217,7 @@ def build_events_df(melodies: List[List[KernEvent]],
                 "position": j,
                 "pitch": ev.pitch,
                 "duration": ev.duration,
-            })
+           })
             rows.append(row)
     return pd.DataFrame(rows)
 
@@ -736,6 +736,7 @@ def run_eda(corpus_root: Path,
 
     # MIDI pitch conversion
     print("\n[5] Converting pitches to MIDI …")
+    df_events["is_rest"] = df_events["pitch"] == "r"
     df_notes = df_events[~df_events["is_rest"]].copy()
     df_notes["midi_pitch"] = df_notes["pitch"].apply(kern_to_midi)
     print(f"    Note events (excl. rests): {len(df_notes)}")
@@ -762,9 +763,9 @@ def run_eda(corpus_root: Path,
 
     # Save intermediate CSVs
     print("\n[8] Saving CSVs …")
-    df_events.to_csv(out_dir / "events.csv", index=False)
-    df_notes.to_csv(out_dir / "notes.csv", index=False)
-    df_intervals.to_csv(out_dir / "intervals.csv", index=False)
+    df_events.to_csv(out_dir / "meertens_events.csv", index=False)
+    df_notes.to_csv(out_dir / "meertens_notes.csv", index=False)
+    df_intervals.to_csv(out_dir / "meertens_intervals.csv", index=False)
     # key_df.to_csv(out_dir / "keys.csv", index=False)
 
     # Polyphony report (per-file)
@@ -773,7 +774,7 @@ def run_eda(corpus_root: Path,
         .drop_duplicates(subset="melody_id")
         .sort_values("n_voices", ascending=False)
     )
-    poly_df.to_csv(out_dir / "polyphony_report.csv", index=False)
+    poly_df.to_csv(out_dir / "meertens_polyphony_report.csv", index=False)
     print(f"    Polyphony report: {(~poly_df['is_monophonic']).sum()} "
           f"polyphonic / {len(poly_df)} total")
 
@@ -785,8 +786,20 @@ def run_eda(corpus_root: Path,
         .apply(list)
     )
     pd.DataFrame({"melody_id": unique_mel.index, "pitch": unique_mel.values})\
-        .to_csv(out_dir / "unique_melodies.csv", index=False)
+        .to_csv(out_dir / "meertens_unique_melodies.csv", index=False)
     print(f"Saved to {out_dir}/")
+
+    # Unique melodies with meta data (filename and path for IDyOM testing) in 
+    # compressed format
+    melody_meta = df_notes.groupby("melody_id")[["filename", "path"]].first()
+
+    pd.DataFrame({
+        "melody_id": unique_mel.index,
+        "pitch": unique_mel.values,
+        "filename": melody_meta.loc[unique_mel.index, "filename"].values,
+        "path": melody_meta.loc[unique_mel.index, "path"].values,
+    }).to_csv(out_dir / "meertens_meta_unique_melodies.csv", index=False)
+    
 
     # Plots
     print("\n[9] Generating plots …")
