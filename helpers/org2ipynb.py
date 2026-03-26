@@ -134,7 +134,7 @@ def detect_kernel(org_text: str) -> str:
     """Try to detect the primary language from src blocks.
     Prefers Python over shell languages since shell can run via %%bash magic."""
     langs = re.findall(r"#\+begin_src\s+(\S+)", org_text, re.IGNORECASE)
-    cleaned = [l.replace("jupyter-", "").replace("ipython", "python") for l in langs]
+    cleaned = [lang.replace("jupyter-", "").replace("ipython", "python") for lang in langs]
     if not cleaned:
         return "python"
     if "python" in cleaned:

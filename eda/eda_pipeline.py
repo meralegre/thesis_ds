@@ -4,6 +4,9 @@ from __future__ import annotations
 import argparse
 import os
 import pathlib
+import shutil
+import sys
+import re
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -51,6 +54,10 @@ NON_CORE_CHARS = (
     | USER_MARK_CHARS
 )
 
+NOTE_MAP = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
+
+KEY_TANDEM_RE = re.compile(r"^\*[A-Ga-g](?:#|-)?\s*:\s*$", re.M)
+KSIG_RE       = re.compile(r"^\*k\[[^\]]*\]\s*$", re.M)
 
 # ============================================================================
 # HELPER FUNCTIONS
@@ -133,129 +140,55 @@ def parse_kern_token(tok: str) -> Optional[KernEvent]:
 # FILE LOADING
 # ============================================================================
 
-def load_kern_melody(path: pathlib.Path) -> List[KernEvent]:
-    """Load a single **kern file and return its list of cleaned events.
-    Assumes monophonic input (takes first spine only)."""
-    out: list[KernEvent] = []
+def load_kern_melody(path: pathlib.Path, spine=0):
+    """
+    Parse a kern file and extract the melodic line.
+    
+    For multi-spine (polyphonic) files, extracts the specified spine.
+    Default spine=0 takes the first (leftmost) voice, which is
+    conventionally the main melody in folk song collections.
+    """
+    out = []
+    n_spines = 1
+    
     with path.open("r", encoding="utf-8", errors="ignore") as f:
         for raw in f:
             line = raw.strip()
             if not line:
                 continue
-            # skip comments, interpretations, barlines, null tokens
-            if line.startswith(("*", "!", "=", ".")):
+            
+            # Detect number of spines from header
+            if line.startswith("**"):
+                n_spines = line.count("\t") + 1
                 continue
-
-            tok = line.split("\t")[0].strip()
+            
+            # Skip comments, interpretations, barlines
+            if line.startswith(("!", "=")):
+                continue
+            
+            # Skip spine manipulation lines (splits, joins, terminators)
+            if line.startswith("*"):
+                continue
+            
+            # Extract the target spine
+            fields = line.split("\t")
+            if spine < len(fields):
+                tok = fields[spine].strip()
+            else:
+                continue
+            
+            # Skip null tokens (no event in this spine)
+            if not tok or tok == ".":
+                continue
+            
             ev = parse_kern_token(tok)
             if ev is not None:
                 out.append(ev)
     return out
 
-
-# ============================================================================
-# CORPUS COLLECTION
-# ============================================================================
-
-def derive_labels(path: pathlib.Path, corpus_root: pathlib.Path,
-                  label_depth: int = 0,
-                  corpus_name: str = "corpus") -> dict:
-    """Derive hierarchical labels from the relative path."""
-    if label_depth == 0:
-        return {"label_0": corpus_name}
-
-    rel_parts = path.relative_to(corpus_root).parts
-    labels: dict = {}
-    for i in range(label_depth):
-        labels[f"label_{i}"] = rel_parts[i] if i < len(rel_parts) else "unknown"
-    return labels
-
-
-def collect_corpus(corpus_root: pathlib.Path,
-                   label_depth: int = 2,
-                   min_events: int = 0,
-                   file_voices: Optional[Dict[str, int]] = None,
-                   corpus_name: str = "corpus",
-                   ) -> Tuple[List[List[KernEvent]], List[dict]]:
-    """Walk corpus_root, parse every krn file and return (melodies, meta)"""
-    melodies: list[list[KernEvent]] = []
-    meta_list: list[dict] = []
-
-    for path in sorted(corpus_root.rglob("*.krn")):
-        events = load_kern_melody(path)
-        if len(events) < min_events:
-            continue
-
-        n_voices = (file_voices or {}).get(str(path), 1)
-        labels = derive_labels(path, corpus_root, label_depth,
-                               corpus_name=corpus_name)
-        melodies.append(events)
-        meta_list.append({
-            "filename": path.name,
-            "path": str(path),
-            **labels,
-            "length": len(events),
-            "n_voices": n_voices,
-            "is_monophonic": n_voices == 1,
-        })
-
-    return melodies, meta_list
-
-
-# ============================================================================
-# EVENTS DATAFRAME
-# ============================================================================
-
-def build_events_df(melodies: List[List[KernEvent]],
-                    meta: List[dict]) -> pd.DataFrame:
-    rows = []
-    for i, (events, m) in enumerate(zip(melodies, meta)):
-        for j, ev in enumerate(events):
-            row = m.copy()
-            row.update({
-                "melody_id": i,
-                "position": j,
-                "pitch": ev.pitch,
-                "duration": ev.duration,
-           })
-            rows.append(row)
-    return pd.DataFrame(rows)
-
-
-# ============================================================================
-# DUPLICATE REMOVAL
-# ============================================================================
-
-def find_exact_duplicates(df: pd.DataFrame) -> Tuple[List[int], List[dict]]:
-    """Return (keep_ids, duplicate_records) based on exact (pitch, duration)
-    signature matching."""
-    prep = (
-        df.sort_values(["melody_id", "position"])
-        .groupby("melody_id")
-        .apply(lambda g: tuple(zip(g["pitch"], g["duration"])))
-    )
-
-    seen: dict = {}
-    keep_ids: list[int] = []
-    exact_dupes: list[dict] = []
-
-    for mel_id, sig in prep.items():
-        sig = tuple(sig)
-        if sig in seen:
-            exact_dupes.append({"removed_id": mel_id, "duplicate_of": seen[sig]})
-        else:
-            seen[sig] = mel_id
-            keep_ids.append(mel_id)
-
-    return keep_ids, exact_dupes
-
-
 # ============================================================================
 # PITCH CONVERSION  (kern to MIDI)
 # ============================================================================
-
-NOTE_MAP = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
-
 
 def kern_to_midi(k_pitch: str) -> int:
     letter = k_pitch[0].lower()
@@ -285,609 +218,685 @@ def kern_to_midi(k_pitch: str) -> int:
     midi -= remainder.count("-")
     return midi
 
-
 # ============================================================================
-# INTERVAL COMPUTATION
+# KEY EXTRACTION
 # ============================================================================
 
-def get_intervals(df_notes: pd.DataFrame,
-                  group_col: str = "label_0") -> pd.DataFrame:
-    """Compute successive pitch intervals (in semitones) per melody."""
-    rows = []
-    for mel_id, group in (
-        df_notes.sort_values(["melody_id", "position"]).groupby("melody_id")
-    ):
-        pitches = group["midi_pitch"].values
-        label = group[group_col].iloc[0]
-        for i in range(1, len(pitches)):
-            rows.append({
-                "melody_id": mel_id,
-                "interval": int(pitches[i] - pitches[i - 1]),
-                group_col: label,
+def extract_keys(root_path: Path):
+    """Extract key and key signature from kern file tandem interpretations."""
+ 
+    files = sorted(root_path.rglob("*.krn"))
+    data = []
+    for f in files:
+        txt = f.read_text(encoding="utf-8", errors="ignore")
+        key_m = KEY_TANDEM_RE.search(txt)
+        ksig_m = KSIG_RE.search(txt)
+ 
+        key_line = key_m.group(0).strip() if key_m else None
+        ksig_line = ksig_m.group(0).strip() if ksig_m else None
+ 
+        rel = f.relative_to(root_path)
+        data.append({
+            "path": str(f),
+            "key_tandem": key_line,
+            "key_signature": ksig_line,
+        })
+ 
+    return pd.DataFrame(data)
+
+# =============================================================================
+# CORPUS PROCESSOR
+# =============================================================================
+ 
+class CorpusProcessor:
+    """
+    Full preprocessing and EDA pipeline for a kern corpus.
+    """
+ 
+    def __init__(self, root_path: str, corpus_name: str = "Corpus", label_depth: int = 2):
+        """
+        Args:
+            root_path: path to the corpus root folder
+            corpus_name: name for display in plots and prints
+            label_depth: how many path levels to use as hierarchical labels.
+                         Essen=2 (continent/country), Meertens=0 (flat folder)
+                         1 = just first subfolder level
+        """
+        self.root = Path(root_path)
+        self.name = corpus_name
+        self.label_depth = label_depth
+        self.melodies = None
+        self.meta = None
+        self.df_events = None
+        self.df_notes = None
+        self.df_duplicates = None
+        self.df_intervals = None
+        self.df_validation = None
+        self.unique_melodies = None
+ 
+    # ── Loading and cleaning ──
+ 
+    def load_corpus(self):
+        """Parse all kern files and build event dataframe."""
+        melodies = []
+        meta_list = []
+ 
+        for path in self.root.rglob("*.krn"):
+            events = load_kern_melody(path)
+            rel_parts = path.relative_to(self.root).parts
+ 
+            # Extract hierarchical labels based on label_depth
+            if self.label_depth >= 2:
+                continent = rel_parts[0] if len(rel_parts) > 1 else "unknown"
+                country = rel_parts[1] if len(rel_parts) > 2 else "unknown"
+            elif self.label_depth == 1:
+                continent = rel_parts[0] if len(rel_parts) > 1 else self.name
+                country = "all"
+            else:
+                continent = self.name
+                country = "all"
+ 
+            melodies.append(events)
+            meta_list.append({
+                "filename": path.name,
+                "path": str(path.relative_to(self.root)),
+                "continent": continent,
+                "country": country,
+                "length": len(events),
             })
-    return pd.DataFrame(rows)
+ 
+        self.melodies = melodies
+        self.meta = meta_list
+        print(f"[{self.name}] Loaded {len(melodies)} melodies")
+ 
+        # Build events dataframe
+        events_df = []
+        for i, (events, m) in enumerate(zip(melodies, meta_list)):
+            for j, ev in enumerate(events):
+                row = m.copy()
+                row.update({
+                    "melody_id": i,
+                    "position": j,
+                    "pitch": ev.pitch,
+                    "duration": ev.duration,
+                    "is_rest": ev.is_rest,
+                })
+                events_df.append(row)
+ 
+        self.df_events = pd.DataFrame(events_df)
+        print(f"[{self.name}] Total events: {len(self.df_events)}")
+ 
+        # Notes only (no rests), with MIDI pitch
+        self.df_notes = self.df_events[~self.df_events["is_rest"]].copy()
+        self.df_notes["midi_pitch"] = self.df_notes["pitch"].apply(kern_to_midi)
+        self.df_notes = self.df_notes.dropna(subset=["midi_pitch"])
+        self.df_notes["midi_pitch"] = self.df_notes["midi_pitch"].astype(int)
+        print(f"[{self.name}] Notes (no rests): {len(self.df_notes)}")
+ 
+        return self
+ 
+    # ── Validation ──
+ 
+    def validate_corpus(self, remove_invalid=True):
+        """
+        Validate each melody for:
+        1. Has pitched notes (not just rests/comments)
+        2. Has valid durations (numeric, no fractions like 3/2)
+        3. Minimum length (at least 2 notes for prediction)
+        """
+        if self.df_events is None:
+            raise ValueError("Call load_corpus() first")
+ 
+        invalid_files = []
+        reasons = []
+        polyphonic_count = 0
+ 
+        for mel_id in self.df_events["melody_id"].unique():
+            mel_events = self.df_events[self.df_events["melody_id"] == mel_id]
+            mel_meta = self.meta[mel_id]
+            filepath = mel_meta["path"]
+ 
+            # Check 1: Has pitched notes
+            notes = mel_events[~mel_events["is_rest"]]
+            if len(notes) == 0:
+                invalid_files.append(mel_id)
+                reasons.append({"melody_id": mel_id, "path": filepath, "reason": "no_pitched_notes"})
+                continue
+ 
+            # Valid durations (no fractions, all numeric)
+            bad_durations = []
+            for dur in mel_events["duration"].unique():
+                dur_str = str(dur).strip()
+                if not dur_str:
+                    continue
+                # Check for fractions like 3/2
+                if "/" in dur_str:
+                    bad_durations.append(dur_str)
+                # Check it's a valid kern duration (digits and dots only)
+                elif not all(c in "0123456789." for c in dur_str):
+                    bad_durations.append(dur_str)
+            
+            if bad_durations:
+                invalid_files.append(mel_id)
+                reasons.append({
+                    "melody_id": mel_id, "path": filepath,
+                    "reason": f"invalid_duration: {bad_durations}"
+                })
+                continue
+ 
+            # Minimum length
+            if len(notes) < 2:
+                invalid_files.append(mel_id)
+                reasons.append({"melody_id": mel_id, "path": filepath, "reason": "too_short"})
+                continue
+ 
+            # Count polyphonic files (NOT removed, first voice extracted)
+            full_path = self.root / filepath
+            if full_path.exists():
+                try:
+                    with full_path.open("r", encoding="utf-8", errors="ignore") as f:
+                        for line in f:
+                            if line.startswith("**"):
+                                n_voices = line.count("\t") + 1
+                                if n_voices > 1:
+                                    polyphonic_count += 1
+                                break
+                except Exception:
+                    pass
+ 
+        self.df_validation = pd.DataFrame(reasons)
+        
+        print(f"[{self.name}] Validation results:")
+        print(f"  Total melodies: {self.df_events['melody_id'].nunique()}")
+        print(f"  Invalid (to remove): {len(invalid_files)}")
+        
+        if len(reasons) > 0:
+            reason_counts = self.df_validation["reason"].apply(
+                lambda r: r.split(":")[0] if ":" in r else r
+            ).value_counts()
+            for reason, count in reason_counts.items():
+                print(f"    {reason}: {count}")
+        
+        print(f"  Polyphonic (first voice extracted, kept): {polyphonic_count}")
+ 
+        if remove_invalid and invalid_files:
+            self.df_events = self.df_events[~self.df_events["melody_id"].isin(invalid_files)].copy()
+            self.df_notes = self.df_notes[~self.df_notes["melody_id"].isin(invalid_files)].copy()
+            print(f"  Remaining after removal: {self.df_events['melody_id'].nunique()}")
+ 
+        return self
+ 
+    # ── Duplicate removal ──
+ 
+    def remove_duplicates(self):
+        """Remove exact duplicates (same pitch + duration sequence)."""
+        df = self.df_notes
+ 
+        # Build signatures: tuple of (pitch, duration) pairs per melody
+        sigs = (df.sort_values(["melody_id", "position"])
+                  .groupby("melody_id")
+                  .apply(lambda g: tuple(zip(g["pitch"], g["duration"]))))
+ 
+        seen = {}
+        keep_ids = []
+        exact_dupes = []
+ 
+        for mel_id, sig in sigs.items():
+            sig = tuple(sig)
+            if sig in seen:
+                exact_dupes.append({"removed_id": mel_id, "duplicate_of": seen[sig], "type": "exact"})
+            else:
+                seen[sig] = mel_id
+                keep_ids.append(mel_id)
+ 
+        self.df_duplicates = pd.DataFrame(exact_dupes)
+        self.df_notes = self.df_notes[self.df_notes["melody_id"].isin(keep_ids)].copy()
+ 
+        # Build unique melodies list
+        self.unique_melodies = (
+            self.df_notes.sort_values(["melody_id", "position"])
+            .groupby("melody_id")["midi_pitch"]
+            .apply(list)
+        )
+ 
+        print(f"[{self.name}] Duplicates removed:")
+        print(f"  Exact: {len(exact_dupes)}")
+        print(f"  Remaining melodies: {len(keep_ids)}")
+ 
+        return self
+ 
+    # ── Intervals utility ──
+ 
+    def get_intervals(self):
+        """
+        Compute pitch intervals for all melodies.
+        Returns a dataframe with columns: melody_id, interval, continent.
+        Useful for interval distribution plots and statistics.
+        """
+        df = self.df_notes
+        intervals_data = []
+        for mel_id, group in df.sort_values(["melody_id", "position"]).groupby("melody_id"):
+            pitches = group["midi_pitch"].values
+            continent = group["continent"].iloc[0]
+            for i in range(1, len(pitches)):
+                intervals_data.append({
+                    "melody_id": mel_id,
+                    "interval": pitches[i] - pitches[i-1],
+                    "continent": continent,
+                })
+        self.df_intervals = pd.DataFrame(intervals_data)
+        return self.df_intervals
+ 
+    # ── EDA Plots ──
+ 
+    def plot_melody_lengths(self, output_dir, max_len=128):
+        """Melody length distribution with max_len cutoff."""
+        lengths = self.df_notes.groupby("melody_id")["position"].count()
+ 
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+ 
+        axes[0].hist(lengths, bins=50, color="#2d5a7b", edgecolor="white", alpha=0.85)
+        axes[0].axvline(x=max_len, color="red", linestyle="--", linewidth=2, label=f"max_len = {max_len}")
+        axes[0].set_xlabel("Melody length (number of notes)")
+        axes[0].set_ylabel("Count")
+        axes[0].set_title(f"Melody length distribution ({self.name})")
+        axes[0].legend()
+ 
+        n_total = len(lengths)
+        n_trunc = (lengths > max_len).sum()
+        stats = (f"Total: {n_total}\nMean: {lengths.mean():.1f}\nMedian: {lengths.median():.1f}\n"
+                 f"Truncated (>{max_len}): {n_trunc} ({n_trunc/n_total*100:.1f}%)")
+        axes[0].text(0.95, 0.95, stats, transform=axes[0].transAxes, va="top", ha="right",
+                     fontsize=9, bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
+ 
+        sorted_l = np.sort(lengths)
+        cumulative = np.arange(1, len(sorted_l) + 1) / len(sorted_l)
+        axes[1].plot(sorted_l, cumulative, color="#2d5a7b", linewidth=2)
+        axes[1].axvline(x=max_len, color="red", linestyle="--", linewidth=2, label=f"max_len = {max_len}")
+        axes[1].set_xlabel("Melody length (number of notes)")
+        axes[1].set_ylabel("Cumulative proportion")
+        axes[1].set_title(f"Cumulative melody length ({self.name})")
+        axes[1].legend()
+ 
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/melody_lengths.png", dpi=150, bbox_inches="tight")
+        plt.close()
+ 
+        for ml in [32, 64, 96, 128, 256]:
+            pct = (lengths > ml).sum() / n_total * 100
+            print(f"  max_len={ml}: {pct:.1f}% truncated")
+ 
+    def plot_pitch_frequency(self, output_dir, top_n=30):
+        """Most frequent pitches."""
+        pitch_counts = self.df_notes["pitch"].value_counts().head(top_n).reset_index()
+        pitch_counts.columns = ["pitch", "count"]
+ 
+        plt.figure(figsize=(10, 6))
+        sns.barplot(data=pitch_counts, x="pitch", y="count", palette="viridis")
+        plt.xticks(rotation=90)
+        plt.title(f"Most frequent pitches (top {top_n}) ({self.name})")
+        plt.xlabel("Pitch")
+        plt.ylabel("Count")
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/pitch_freq.png", dpi=150, bbox_inches="tight")
+        plt.close()
+ 
+    def plot_duration_frequency(self, output_dir, top_n=20, log_scale=False):
+        """Most frequent rhythmic durations."""
+        dur_counts = self.df_events["duration"].value_counts().head(top_n).reset_index()
+        dur_counts.columns = ["duration", "count"]
 
+        plt.figure(figsize=(12, 5))
+        sns.barplot(data=dur_counts, x="duration", y="count", palette="viridis")
+        if log_scale:
+            plt.yscale("log")
+        plt.title(f"Most frequent durations ({self.name})")
+        plt.xlabel("Duration (kern)")
+        plt.ylabel("Count" + (" (log)" if log_scale else ""))
+        plt.tight_layout()
 
-# ============================================================================
-# KEY EXTRACTION FROM KERN TANDEM INTERPRETATIONS
-# ============================================================================
-
-# _KEY_TANDEM_RE = re.compile(r"^\*[A-Ga-g](?:#|-)?\s*:\s*$", re.M)
-# _KSIG_RE       = re.compile(r"^\*k\[[^\]]*\]\s*$", re.M)
-
-
-# def extract_keys_from_files(corpus_root: pathlib.Path) -> pd.DataFrame:
-#     """Read tonic and key-signature tandem interpretations from all .krn files."""
-#     data = []
-#     for f in sorted(corpus_root.rglob("*.krn")):
-#         txt = f.read_text(encoding="utf-8", errors="ignore")
-#         key_m = _KEY_TANDEM_RE.search(txt)
-#         ksig_m = _KSIG_RE.search(txt)
-#         data.append({
-#             "path": str(f),
-#             "tonic": key_m.group(0).strip() if key_m else None,
-#             "key_signature": ksig_m.group(0).strip() if ksig_m else None,
-#         })
-#     return pd.DataFrame(data)
-
-
-# ============================================================================
-# POLYPHONY CHECK
-# ============================================================================
-
-def get_voice_count(path: pathlib.Path) -> int:
-    """Return the number of spines (voices) declared in a single krn file.
-    Determined by counting tab-separated columns on the first **kern
-    interpretation line."""
-    with path.open(encoding="utf-8", errors="ignore") as fh:
-        for line in fh:
-            if line.startswith("**"):
-                return line.count("\t") + 1
-    return 1
-
-
-def check_polyphony(corpus_root: pathlib.Path) -> Dict[str, int]:
-    """Return a dict  {file_path_str: n_voices}  for every .krn file."""
-    return {
-        str(f): get_voice_count(f)
-        for f in sorted(corpus_root.rglob("*.krn"))
-    }
-
-
-def summarise_polyphony(file_voices: Dict[str, int]) -> None:
-    """Pretty-print an aggregate summary and list any non-monophonic files."""
-    from collections import Counter as _Counter
-    agg = _Counter(file_voices.values())
-    for n in sorted(agg):
-        print(f"{n} voice(s): {agg[n]} files")
-
-    poly_files = {p: v for p, v in file_voices.items() if v > 1}
-    if poly_files:
-        print(f"\n {len(poly_files)} non-monophonic file(s) detected:")
-        for p, v in sorted(poly_files.items()):
-            print(f"{v} voices -> {p}")
-    else:
-        print(" All files are monophonic.")
-
-
-# ============================================================================
-# PLOTTING FUNCTIONS
-# ============================================================================
-
-def plot_melody_length_distribution(df_notes: pd.DataFrame,
-                                    keep_ids: List[int],
-                                    out_dir: Path,
-                                    corpus_name: str,
-                                    max_len: int = 128):
-    ids = df_notes[df_notes.melody_id.isin(keep_ids)]
-    lengths = ids.groupby("melody_id")["position"].count()
-
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
-    axes[0].hist(lengths, bins=50, color="#2d5a7b", edgecolor="white", alpha=0.85)
-    axes[0].axvline(x=max_len, color="red", linestyle="--", linewidth=2,
-                    label=f"max_len = {max_len}")
-    axes[0].set_xlabel("Melody length (number of notes)")
-    axes[0].set_ylabel("Count")
-    axes[0].set_title(f"Melody length distribution ({corpus_name})")
-    axes[0].legend()
-
-    n_truncated = (lengths > max_len).sum()
-    n_total = len(lengths)
-    stats_text = (
-        f"Total: {n_total}\nMean: {lengths.mean():.1f}\n"
-        f"Median: {lengths.median():.1f}\n"
-        f"Truncated (>{max_len}): {n_truncated} ({n_truncated / n_total * 100:.1f}%)"
-    )
-    axes[0].text(0.95, 0.95, stats_text, transform=axes[0].transAxes,
-                 va="top", ha="right", fontsize=9,
-                 bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
-
-    sorted_lengths = np.sort(lengths)
-    cumulative = np.arange(1, len(sorted_lengths) + 1) / len(sorted_lengths)
-    axes[1].plot(sorted_lengths, cumulative, color="#2d5a7b", linewidth=2)
-    axes[1].axvline(x=max_len, color="red", linestyle="--", linewidth=2,
-                    label=f"max_len = {max_len}")
-    axes[1].set_xlabel("Melody length (number of notes)")
-    axes[1].set_ylabel("Cumulative proportion")
-    axes[1].set_title("Cumulative melody length distribution")
-    axes[1].legend()
-
-    plt.tight_layout()
-    plt.savefig(out_dir / "melody_length_distribution.png", dpi=100,
-                bbox_inches="tight")
-    plt.close()
-
-
-def plot_pitch_frequency(melodies: List[List[KernEvent]],
-                         out_dir: Path, corpus_name: str):
-    pitch_counter: Counter = Counter()
-    for events in melodies:
-        for ev in events:
-            if not ev.is_rest:
-                pitch_counter[ev.pitch] += 1
-
-    df = (
-        pd.DataFrame(pitch_counter.items(), columns=["pitch", "count"])
-        .sort_values("count", ascending=False)
-        .head(30)
-    )
-    plt.figure(figsize=(10, 6))
-    sns.barplot(data=df, x="pitch", y="count", palette="viridis", hue="pitch", legend=False)
-    plt.xticks(rotation=90)
-    plt.title(f"Most frequent pitches – top 30 ({corpus_name})")
-    plt.tight_layout()
-    plt.savefig(out_dir / "pitch_freq.png", dpi=100, bbox_inches="tight")
-    plt.close()
-
-    print(f"  Unique pitches: {len(pitch_counter)}")
-
-
-def plot_rhythm_frequency(melodies: List[List[KernEvent]],
-                          out_dir: Path, corpus_name: str):
-    dur_counter: Counter = Counter()
-    for events in melodies:
-        for ev in events:
-            dur_counter[ev.duration] += 1
-
-    df = (
-        pd.DataFrame(dur_counter.items(), columns=["duration", "count"])
-        .sort_values("count", ascending=False)
-        .head(20)
-    )
-    plt.figure(figsize=(12, 5))
-    sns.barplot(data=df, x="duration", y="count", palette="viridis", hue="duration", legend=False)
-    plt.title(f"Most frequent rhythmic durations ({corpus_name})")
-    plt.xlabel("Duration (kern reciprocal notation)")
-    plt.ylabel("Count")
-    plt.tight_layout()
-    plt.savefig(out_dir / "rhythm_freq.png", dpi=100, bbox_inches="tight")
-    plt.close()
-
-
-def plot_rhythm_by_group(df_events: pd.DataFrame, group_col: str,
-                         out_dir: Path, corpus_name: str):
-    plt.figure(figsize=(12, 5))
-    sns.countplot(
-        data=df_events,
-        x="duration",
-        hue=group_col,
-        order=df_events["duration"].value_counts().index[:10],
-        palette="viridis",
-    )
-    plt.xticks(rotation=45)
-    plt.title(f"Rhythm by {group_col} ({corpus_name})")
-    plt.tight_layout()
-    plt.savefig(out_dir / f"rhythm_by_{group_col}.png", dpi=120,
-                bbox_inches="tight")
-    plt.close()
-
-
-def plot_interval_distribution(df_intervals: pd.DataFrame,
-                               group_col: str,
-                               out_dir: Path,
-                               corpus_name: str):
-    n_groups = df_intervals[group_col].nunique()
-    n_panels = 1 if n_groups <= 1 else 2
-    fig, axes = plt.subplots(1, n_panels, figsize=(7 * n_panels, 5))
-    if n_panels == 1:
-        axes = [axes]
-
-    # Overall
-    clipped = df_intervals["interval"].clip(-15, 15)
-    axes[0].hist(clipped, bins=np.arange(-15.5, 16.5, 1),
-                 color="#2d5a7b", edgecolor="white", alpha=0.85)
-    axes[0].set_xlabel("Pitch interval (semitones)")
-    axes[0].set_ylabel("Count")
-    axes[0].set_title(f"Pitch interval distribution ({corpus_name})")
-    axes[0].axvline(x=0, color="red", linestyle="--", alpha=0.5, label="Unison")
-    axes[0].legend()
-
-    # By top-2 groups (only when multiple groups exist)
-    if n_panels == 2:
-        groups = df_intervals[group_col].value_counts().index[:2]
-        for grp in groups:
-            subset = df_intervals[df_intervals[group_col] == grp]["interval"].clip(-15, 15)
-            axes[1].hist(subset, bins=np.arange(-15.5, 16.5, 1),
-                         alpha=0.5, label=grp, density=True)
+        fname = "duration_freq_log.png" if log_scale else "duration_freq.png"  # ← dynamic name
+        plt.savefig(f"{output_dir}/{fname}", dpi=150, bbox_inches="tight")
+        plt.close()
+ 
+    def plot_duration_by_continent(self, output_dir, top_n=10):
+        """Duration distribution by continent."""
+        order = self.df_events["duration"].value_counts().index[:top_n]
+ 
+        plt.figure(figsize=(12, 5))
+        sns.countplot(data=self.df_events, x="duration", hue="continent",
+                      order=order, palette="viridis")
+        plt.title(f"Rhythmic duration by continent ({self.name})")
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/duration_by_continent.png", dpi=150, bbox_inches="tight")
+        plt.close()
+ 
+    def plot_interval_distribution(self, output_dir):
+        """Pitch interval distribution overall and by continent."""
+        if self.df_intervals is None:
+            self.get_intervals()
+        df_int = self.df_intervals
+ 
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+ 
+        clipped = df_int["interval"].clip(-15, 15)
+        axes[0].hist(clipped, bins=np.arange(-15.5, 16.5, 1), color="#2d5a7b", edgecolor="white", alpha=0.85)
+        axes[0].set_xlabel("Pitch interval (semitones)")
+        axes[0].set_ylabel("Count")
+        axes[0].set_title(f"Pitch interval distribution ({self.name})")
+        axes[0].axvline(x=0, color="red", linestyle="--", alpha=0.5, label="Unison")
+        axes[0].legend()
+ 
+        continents = [c for c in df_int["continent"].unique()
+                      if df_int[df_int["continent"] == c].shape[0] > 100]
+        for continent in sorted(continents):
+            subset = df_int[df_int["continent"] == continent]["interval"].clip(-15, 15)
+            axes[1].hist(subset, bins=np.arange(-15.5, 16.5, 1), alpha=0.5,
+                         label=continent, density=True)
         axes[1].set_xlabel("Pitch interval (semitones)")
         axes[1].set_ylabel("Density")
-        axes[1].set_title(f"Interval distribution by {group_col}")
+        axes[1].set_title(f"Interval distribution by continent ({self.name})")
         axes[1].legend()
-
-    plt.tight_layout()
-    plt.savefig(out_dir / "interval_distribution.png", dpi=100,
-                bbox_inches="tight")
-    plt.close()
-
-
-def plot_interval_by_group(df_intervals: pd.DataFrame, group_col: str,
-                           out_dir: Path, corpus_name: str):
-    df_top = (
-        df_intervals
-        .groupby(group_col)["interval"]
-        .value_counts()
-        .groupby(group_col)
-        .head(10)
-        .rename("count")
-        .reset_index()
-    )
-    df_top["proportion"] = df_top.groupby(group_col)["count"].transform(
-        lambda x: x / x.sum()
-    )
-
-    plt.figure(figsize=(14, 5))
-    g = sns.barplot(
-        data=df_top,
-        x="interval",
-        y="proportion",
-        hue=group_col,
-        order=df_intervals["interval"].value_counts().head(10).index,
-        palette="viridis",
-    )
-    sns.move_legend(g, "upper right", title=group_col.replace("_", " ").title())
-    plt.xticks(rotation=45)
-    plt.title(f"Top intervals by {group_col} – normalised ({corpus_name})")
-    plt.tight_layout()
-    plt.savefig(out_dir / f"interval_by_{group_col}.png", dpi=100,
-                bbox_inches="tight")
-    plt.close()
-
-
-def plot_bigram_heatmap(df_notes: pd.DataFrame, keep_ids: List[int],
-                        out_dir: Path, corpus_name: str):
-    ids = df_notes[df_notes.melody_id.isin(keep_ids)]
-    pitch_class_names = ["C", "C#", "D", "D#", "E", "F",
-                         "F#", "G", "G#", "A", "A#", "B"]
-
-    transitions = np.zeros((12, 12))
-    for _, group in ids.sort_values(["melody_id", "position"]).groupby("melody_id"):
-        pitches = group["midi_pitch"].values
-        for i in range(len(pitches) - 1):
-            transitions[pitches[i] % 12][pitches[i + 1] % 12] += 1
-
-    row_sums = transitions.sum(axis=1, keepdims=True)
-    row_sums[row_sums == 0] = 1
-    trans_prob = transitions / row_sums
-
-    fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
-
-    sns.heatmap(np.log1p(transitions), xticklabels=pitch_class_names,
-                yticklabels=pitch_class_names, cmap="YlOrRd", ax=axes[0],
-                cbar_kws={"label": "Count (log scale)"})
-    axes[0].set_xlabel("Next pitch class")
-    axes[0].set_ylabel("Current pitch class")
-    axes[0].set_title(f"Bigram counts – log ({corpus_name})")
-
-    sns.heatmap(trans_prob, xticklabels=pitch_class_names,
-                yticklabels=pitch_class_names, cmap="YlOrRd", ax=axes[1],
-                cbar_kws={"label": "P(next | current)"})
-    axes[1].set_xlabel("Next pitch class")
-    axes[1].set_ylabel("Current pitch class")
-    axes[1].set_title("Bigram transition probabilities")
-
-    plt.tight_layout()
-    plt.savefig(out_dir / "bigram_heatmap.png", dpi=100, bbox_inches="tight")
-    plt.close()
-
-
-def plot_key_mode_proportions(key_df: pd.DataFrame, group_col: str,
-                              out_dir: Path, corpus_name: str):
-    """Plot major/minor proportions when estimated-key data is available."""
-    if "mode" not in key_df.columns or group_col not in key_df.columns:
-        print("  [skip] key mode plot – missing columns")
-        return
-
-    tab = key_df.groupby([group_col, "mode"]).size().unstack(fill_value=0)
-    tab_prop = tab.div(tab.sum(axis=1), axis=0)
-
-    ax = tab_prop.plot(kind="bar", stacked=True, figsize=(7, 4),
-                       colormap="viridis")
-    ax.set_ylabel("Proportion")
-    ax.set_xlabel(group_col.replace("_", " ").title())
-    ax.set_title(f"Major vs minor modes ({corpus_name})")
-    ax.legend(title="Mode", bbox_to_anchor=(1.02, 1), loc="upper left")
-    plt.tight_layout()
-    plt.savefig(out_dir / "major_minor_proportion.png", dpi=150,
-                bbox_inches="tight")
-    plt.close()
-
-
-def plot_polyphony_overview(df_events: pd.DataFrame, group_col: str,
-                            out_dir: Path, corpus_name: str):
-    """Bar charts showing voice-count distribution and mono/poly split per group."""
-    melody_meta = (
-        df_events[["melody_id", "n_voices", "is_monophonic", group_col]]
-        .drop_duplicates(subset="melody_id")
-    )
-
-    has_groups = melody_meta[group_col].nunique() > 1
-    n_panels = 2 if has_groups else 1
-    fig, axes = plt.subplots(1, n_panels, figsize=(7 * n_panels, 5))
-    if n_panels == 1:
-        axes = [axes]
-
-    # Left / only: overall voice-count distribution
-    vc = melody_meta["n_voices"].value_counts().sort_index()
-    axes[0].bar(vc.index.astype(str), vc.values, color="#2d5a7b",
-                edgecolor="white", alpha=0.85)
-    axes[0].set_xlabel("Number of voices (spines)")
-    axes[0].set_ylabel("Number of melodies")
-    axes[0].set_title(f"Voice-count distribution ({corpus_name})")
-    for i, (x, y) in enumerate(zip(vc.index.astype(str), vc.values)):
-        axes[0].text(i, y + 0.5, str(y), ha="center", va="bottom", fontsize=9)
-
-    # Right: monophonic vs polyphonic per group (only with multiple groups)
-    if has_groups:
-        ct = (
-            melody_meta
-            .assign(texture=melody_meta["is_monophonic"].map(
-                {True: "monophonic", False: "polyphonic"}))
-            .groupby([group_col, "texture"])
-            .size()
-            .unstack(fill_value=0)
+ 
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/interval_distribution.png", dpi=150, bbox_inches="tight")
+        plt.close()
+ 
+        # Print stats
+        intervals = df_int["interval"]
+        print(f"  Mean interval: {intervals.mean():.2f} semitones")
+        print(f"  Steps (±1-2): {((intervals.abs() >= 1) & (intervals.abs() <= 2)).mean()*100:.1f}%")
+        print(f"  Leaps (>±5): {(intervals.abs() > 5).mean()*100:.1f}%")
+ 
+    def plot_bigram_heatmap(self, output_dir):
+        """Pitch class bigram transition heatmap."""
+        df = self.df_notes
+        pitch_class_names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
+ 
+        transitions = np.zeros((12, 12))
+        for mel_id, group in df.sort_values(["melody_id", "position"]).groupby("melody_id"):
+            pitches = group["midi_pitch"].values
+            for i in range(len(pitches) - 1):
+                transitions[pitches[i] % 12][pitches[i+1] % 12] += 1
+ 
+        row_sums = transitions.sum(axis=1, keepdims=True)
+        row_sums[row_sums == 0] = 1
+        trans_prob = transitions / row_sums
+ 
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5.5))
+ 
+        sns.heatmap(np.log1p(transitions), xticklabels=pitch_class_names,
+                    yticklabels=pitch_class_names, cmap="YlOrRd", ax=axes[0],
+                    cbar_kws={"label": "log(count + 1)"})
+        axes[0].set_xlabel("Next pitch class")
+        axes[0].set_ylabel("Current pitch class")
+        axes[0].set_title(f"Bigram counts ({self.name})")
+ 
+        sns.heatmap(trans_prob, xticklabels=pitch_class_names,
+                    yticklabels=pitch_class_names, cmap="YlOrRd", ax=axes[1],
+                    cbar_kws={"label": "P(next | current)"})
+        axes[1].set_xlabel("Next pitch class")
+        axes[1].set_ylabel("Current pitch class")
+        axes[1].set_title(f"Transition probabilities ({self.name})")
+ 
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/bigram_heatmap.png", dpi=150, bbox_inches="tight")
+        plt.close()
+ 
+    def plot_ngram_counts(self, output_dir, max_order=10):
+        """N-gram counts by order."""
+        melodies_list = (
+            self.df_notes.sort_values(["melody_id", "position"])
+            .groupby("melody_id")["midi_pitch"]
+            .apply(list)
+            .tolist()
         )
-        ct_prop = ct.div(ct.sum(axis=1), axis=0)
-        ct_prop.plot(kind="bar", stacked=True, ax=axes[1], colormap="viridis")
-        axes[1].set_ylabel("Proportion")
-        axes[1].set_xlabel(group_col.replace("_", " ").title())
-        axes[1].set_title(f"Monophonic vs polyphonic by {group_col}")
-        axes[1].legend(title="Texture", bbox_to_anchor=(1.02, 1),
-                       loc="upper left")
-
-    plt.tight_layout()
-    plt.savefig(out_dir / "polyphony_overview.png", dpi=120,
-                bbox_inches="tight")
-    plt.close()
-
-
-# ============================================================================
-# MAIN PIPELINE
-# ============================================================================
-
-def run_eda(corpus_root: Path,
-            corpus_name: str = "corpus",
-            label_depth: int = 2,
-            out_dir: Optional[Path] = None,
-            remove_duplicates: bool = False,
-            max_len: int = 128):
-
-    if out_dir is None:
-        out_dir = Path(f"eda_output_{corpus_name}")
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    group_col = "label_0"
-
-    # Polyphony check
-    print("=" * 60)
-    print(f"EDA for: {corpus_name}  ({corpus_root})")
-    print("=" * 60)
-
-    print("\n[1] Polyphony check")
-    file_voices = check_polyphony(corpus_root)
-    summarise_polyphony(file_voices)
-
-    # Collect & parse
-    print("\n[2] Collecting & parsing melodies …")
-    melodies, meta = collect_corpus(corpus_root, label_depth=label_depth,
-                                    file_voices=file_voices,
-                                    corpus_name=corpus_name)
-    print(f"    Melodies found: {len(melodies)}")
-    n_poly = sum(1 for m in meta if not m["is_monophonic"])
-    if n_poly:
-        print(f" Of which {n_poly} are polyphonic "
-              f"(first spine kept, others discarded)")
-    if not melodies:
-        print(" No krn files found – aborting.")
-        return
-
-    # Build events DataFrame
-    print("\n[3] Building events DataFrame …")
-    df_events = build_events_df(melodies, meta)
-    print(f"    Shape: {df_events.shape}")
-    print(f"    Columns: {list(df_events.columns)}")
-
-    n_groups = df_events[group_col].nunique() if group_col in df_events.columns else 0
-    has_groups = n_groups > 1
-
-    if has_groups:
-        grp_counts = df_events.groupby(group_col)["melody_id"].nunique()
-        print(f"\n    Melodies per {group_col}:")
-        for g, c in grp_counts.items():
-            print(f"      {g}: {c}")
-    else:
-        print("\n Flat corpus (no sub-groups) – group-faceted plots will be skipped.")
-
-    # Duplicate removal
-    print("\n[4] Duplicate detection …")
-    keep_ids, exact_dupes = find_exact_duplicates(df_events)
-    print(f"    Total melodies: {len(melodies)}")
-    print(f"    Exact duplicates: {len(exact_dupes)}")
-    print(f"    Unique melodies: {len(keep_ids)}")
-
-    if remove_duplicates and exact_dupes:
-        df_paths = df_events[["filename", "path", "melody_id"]].drop_duplicates()
-        df_dupes = pd.DataFrame(exact_dupes)
-        dup_paths = df_dupes.merge(df_paths, left_on="removed_id",
-                                   right_on="melody_id", how="inner")
-        for p in dup_paths["path"]:
-            os.remove(p)
-        print(f"Removed {len(exact_dupes)} duplicate files from disk.")
-
-    # MIDI pitch conversion
-    print("\n[5] Converting pitches to MIDI …")
-    df_events["is_rest"] = df_events["pitch"] == "r"
-    df_notes = df_events[~df_events["is_rest"]].copy()
-    df_notes["midi_pitch"] = df_notes["pitch"].apply(kern_to_midi)
-    print(f"    Note events (excl. rests): {len(df_notes)}")
-
-    # Intervals
-    print("\n[6] Computing intervals …")
-    ids_notes = df_notes[df_notes.melody_id.isin(keep_ids)]
-    df_intervals = get_intervals(ids_notes, group_col=group_col)
-    print(f"    Interval rows: {len(df_intervals)}")
-
-    # ── 7. Key extraction from tandem interpretations ──────────────────
-    # print("\n[7] Extracting keys from tandem interpretations …")
-    # key_df = extract_keys_from_files(corpus_root)
-    # n_with_key = key_df["tonic"].notna().sum()
-    # print(f"    Files with tonic info: {n_with_key}/{len(key_df)}")
-
-    # Merge group label into key_df for plotting
-    # path_labels = (
-    #     df_events[["path", group_col]]
-    #     .drop_duplicates()
-    #     .set_index("path")[group_col]
-    # )
-    # key_df[group_col] = key_df["path"].map(path_labels)
-
-    # Save intermediate CSVs
-    print("\n[8] Saving CSVs …")
-    df_events.to_csv(out_dir / "meertens_events.csv", index=False)
-    df_notes.to_csv(out_dir / "meertens_notes.csv", index=False)
-    df_intervals.to_csv(out_dir / "meertens_intervals.csv", index=False)
-    # key_df.to_csv(out_dir / "keys.csv", index=False)
-
-    # Polyphony report (per-file)
-    poly_df = (
-        df_events[["melody_id", "filename", "path", "n_voices", "is_monophonic"]]
-        .drop_duplicates(subset="melody_id")
-        .sort_values("n_voices", ascending=False)
-    )
-    poly_df.to_csv(out_dir / "meertens_polyphony_report.csv", index=False)
-    print(f"    Polyphony report: {(~poly_df['is_monophonic']).sum()} "
-          f"polyphonic / {len(poly_df)} total")
-
-    # Unique melodies in compressed format
-    unique_mel = (
-        df_notes[df_notes.melody_id.isin(keep_ids)]
-        .sort_values(["melody_id", "position"])
-        .groupby("melody_id")["midi_pitch"]
-        .apply(list)
-    )
-    pd.DataFrame({"melody_id": unique_mel.index, "pitch": unique_mel.values})\
-        .to_csv(out_dir / "meertens_unique_melodies.csv", index=False)
-    print(f"Saved to {out_dir}/")
-
-    # Unique melodies with meta data (filename and path for IDyOM testing) in 
-    # compressed format
-    melody_meta = df_notes.groupby("melody_id")[["filename", "path"]].first()
-
-    pd.DataFrame({
-        "melody_id": unique_mel.index,
-        "pitch": unique_mel.values,
-        "filename": melody_meta.loc[unique_mel.index, "filename"].values,
-        "path": melody_meta.loc[unique_mel.index, "path"].values,
-    }).to_csv(out_dir / "meertens_meta_unique_melodies.csv", index=False)
-    
-
-    # Plots
-    print("\n[9] Generating plots …")
-
-    print(" Melody length distribution")
-    plot_melody_length_distribution(df_notes, keep_ids, out_dir,
-                                   corpus_name, max_len)
-
-    print(" Pitch frequency")
-    plot_pitch_frequency(melodies, out_dir, corpus_name)
-
-    print(" Rhythm frequency")
-    plot_rhythm_frequency(melodies, out_dir, corpus_name)
-
-    if has_groups:
-        print(" Rhythm by group")
-        plot_rhythm_by_group(df_events, group_col, out_dir, corpus_name)
-    else:
-        print(" Rhythm by group  [skip – single group]")
-
-    print(" Interval distribution")
-    plot_interval_distribution(df_intervals, group_col, out_dir, corpus_name)
-
-    if has_groups:
-        print(" Interval by group")
-        plot_interval_by_group(df_intervals, group_col, out_dir, corpus_name)
-    else:
-        print(" Interval by group  [skip – single group]")
-
-    print(" Bigram heatmap")
-    plot_bigram_heatmap(df_notes, keep_ids, out_dir, corpus_name)
-
-    # if has_groups:
-    #     print(" Key/mode proportions")
-    #     plot_key_mode_proportions(key_df, group_col, out_dir, corpus_name)
-    # else:
-    #     print(" Key/mode proportions  [skip – single group]")
-
-    print(" Polyphony overview")
-    plot_polyphony_overview(df_events, group_col, out_dir, corpus_name)
-
-    print("\n Done.  All outputs in:", out_dir)
-
-
-# ============================================================================
-# COMMAND-LINE INTERFACE
-# ============================================================================
-
-def main():
-    parser = argparse.ArgumentParser(
-        description="EDA & Preprocessing for **kern musical corpora"
-    )
-    parser.add_argument(
-        "--corpus", default="meertens",
-        help="Human-readable corpus name (used in titles & filenames)"
-    )
-    parser.add_argument(
-        "--root", required=True, type=Path,
-        help="Root directory of the corpus (e.g. data/meertens)"
-    )
-    parser.add_argument(
-        "--label-depth", type=int, default=2,
-        help="How many path levels to use as hierarchical labels "
-             "(Essen=2 for continent/country, Meertens=0 for flat folder)"
-    )
-    parser.add_argument(
-        "--out-dir", type=Path, default=None,
-        help="Output directory for CSVs and plots (default: eda_output_<corpus>)"
-    )
-    parser.add_argument(
-        "--remove-duplicates", action="store_true",
-        help="Actually delete duplicate .krn files from disk (destructive!)"
-    )
-    parser.add_argument(
-        "--max-len", type=int, default=128,
-        help="Melody length cutoff shown on plots"
-    )
-    args = parser.parse_args()
-
-    run_eda(
-        corpus_root=args.root,
-        corpus_name=args.corpus,
-        label_depth=args.label_depth,
-        out_dir=args.out_dir,
-        remove_duplicates=args.remove_duplicates,
-        max_len=args.max_len,
-    )
-
-
+ 
+        counts_per_order = {}
+        total_instances = {}
+ 
+        for n in range(1, max_order + 1):
+            ngrams = set()
+            total = 0
+            for mel in melodies_list:
+                for i in range(len(mel) - n + 1):
+                    ngrams.add(tuple(mel[i:i+n]))
+                    total += 1
+            counts_per_order[n] = len(ngrams)
+            total_instances[n] = total
+ 
+        orders = list(counts_per_order.keys())
+        unique_counts = list(counts_per_order.values())
+ 
+        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+ 
+        bars = axes[0].bar(orders, unique_counts, color="#2d5a7b", edgecolor="white", alpha=0.85)
+        axes[0].set_xlabel("N-gram order")
+        axes[0].set_ylabel("Unique n-grams")
+        axes[0].set_title(f"N-gram counts by order ({self.name})")
+        axes[0].set_xticks(orders)
+        for bar, count in zip(bars, unique_counts):
+            axes[0].text(bar.get_x() + bar.get_width()/2, bar.get_height(),
+                         f"{count:,}", ha="center", va="bottom", fontsize=8)
+ 
+        coverage = [u / t * 100 for u, t in zip(unique_counts, list(total_instances.values()))]
+        axes[1].bar(orders, coverage, color="#5a8a5e", edgecolor="white", alpha=0.85)
+        axes[1].set_xlabel("N-gram order")
+        axes[1].set_ylabel("Unique / Total (%)")
+        axes[1].set_title(f"N-gram coverage ({self.name})")
+        axes[1].set_xticks(orders)
+ 
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/ngram_counts.png", dpi=150, bbox_inches="tight")
+        plt.close()
+ 
+        cumulative = 0
+        print(f"\n  {'Order':<8}{'Unique':<12}{'Instances':<12}{'Coverage %':<12}{'Cumulative'}")
+        for n in orders:
+            cumulative += counts_per_order[n]
+            cov = counts_per_order[n] / total_instances[n] * 100
+            print(f"  {n:<8}{counts_per_order[n]:<12,}{total_instances[n]:<12,}{cov:<12.1f}{cumulative:,}")
+ 
+    def plot_mode_proportion(self, output_dir):
+        """Major vs minor mode proportion by continent."""
+        key_df = extract_keys(self.root)
+ 
+        if key_df["key_tandem"].isna().all():
+            print(f"  [{self.name}] No key tandem interpretations found, skipping mode plot")
+            return
+ 
+        key_df["mode"] = key_df["key_tandem"].apply(
+            lambda k: "minor" if isinstance(k, str) and len(k) > 1 and k[1].islower() 
+                      else "major" if isinstance(k, str) 
+                      else None
+        )
+        key_df = key_df.dropna(subset=["mode"])
+        
+        # Use label_depth for grouping
+        def get_label(p):
+            try:
+                parts = Path(p).relative_to(self.root).parts
+                if self.label_depth >= 1 and len(parts) > 1:
+                    return parts[0]
+                else:
+                    return self.name
+            except ValueError:
+                return self.name
+        
+        key_df["continent"] = key_df["path"].apply(get_label)
+ 
+        tab = key_df.groupby(["continent", "mode"]).size().unstack(fill_value=0)
+        tab_prop = tab.div(tab.sum(axis=1), axis=0)
+ 
+        ax = tab_prop.plot(kind="bar", stacked=True, figsize=(7, 4), colormap="viridis")
+        ax.set_ylabel("Proportion")
+        ax.set_xlabel("Continent")
+        ax.set_title(f"Major vs minor modes ({self.name})")
+        ax.legend(title="Mode", bbox_to_anchor=(1.02, 1), loc="upper left")
+        plt.tight_layout()
+        plt.savefig(f"{output_dir}/mode_proportion.png", dpi=150, bbox_inches="tight")
+        plt.close()
+ 
+    # ── Summary statistics ──
+ 
+    def print_summary(self):
+        """Print corpus summary statistics."""
+        df = self.df_notes
+        n_melodies = df["melody_id"].nunique()
+        n_events = len(df)
+        lengths = df.groupby("melody_id")["position"].count()
+        n_unique_pitches = df["midi_pitch"].nunique()
+        pitch_range = (df["midi_pitch"].min(), df["midi_pitch"].max())
+        continents = df["continent"].unique()
+ 
+        print(f"\n{'='*60}")
+        print(f"CORPUS SUMMARY: {self.name}")
+        print(f"{'='*60}")
+        print(f"  Melodies: {n_melodies}")
+        print(f"  Total notes: {n_events}")
+        print(f"  Unique pitches: {n_unique_pitches}")
+        print(f"  Pitch range: {pitch_range[0]} - {pitch_range[1]} (MIDI)")
+        print(f"  Mean melody length: {lengths.mean():.1f}")
+        print(f"  Median melody length: {lengths.median():.1f}")
+        print(f"  Min/Max length: {lengths.min()} / {lengths.max()}")
+        print(f"  Continents/regions: {list(continents)}")
+        if self.df_duplicates is not None and len(self.df_duplicates) > 0:
+            print(f"  Duplicates removed: {len(self.df_duplicates)}")
+        print(f"{'='*60}\n")
+ 
+    # ── Export clean corpus ──
+ 
+    def export_clean_corpus(self, output_root=None):
+        """
+        Copy only valid, non-duplicate kern files to a new folder,
+        preserving the original directory structure.
+        
+        This folder can be directly imported into IDyOM.
+        
+        Args:
+            output_root: destination folder. Defaults to "{corpus_name}_clean"
+        """
+        import shutil
+ 
+        if output_root is None:
+            output_root = str(self.root) + "_unique"
+        
+        output_root = Path(output_root)
+        
+        # Get melody IDs that survived validation and deduplication
+        surviving_ids = self.df_notes["melody_id"].unique()
+        
+        copied = 0
+        skipped = 0
+        
+        for mel_id in surviving_ids:
+            if mel_id >= len(self.meta):
+                continue
+            mel_meta = self.meta[mel_id]
+            rel_path = mel_meta["path"]
+            
+            src = self.root / rel_path
+            dst = output_root / rel_path
+            
+            if not src.exists():
+                skipped += 1
+                continue
+            
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+            copied += 1
+        
+        print(f"[{self.name}] Exported clean corpus:")
+        print(f"  Destination: {output_root}")
+        print(f"  Files copied: {copied}")
+        if skipped > 0:
+            print(f"  Files skipped (not found): {skipped}")
+        print(f"  (Import this folder into IDyOM)")
+        
+        return output_root
+ 
+    # ── Run all ──
+ 
+    def run_all(self, output_dir="eda_output", max_len=128, export_clean=True):
+        """Run full pipeline: load, validate, clean, deduplicate, plot, export."""
+        os.makedirs(output_dir, exist_ok=True)
+ 
+        print(f"\n--- Loading {self.name} ---")
+        self.load_corpus()
+ 
+        print(f"\n--- Validating ---")
+        self.validate_corpus(remove_invalid=True)
+ 
+        print(f"\n--- Removing duplicates ---")
+        self.remove_duplicates()
+ 
+        self.print_summary()
+ 
+        print(f"\n--- Computing intervals ---")
+        self.get_intervals()
+ 
+        print(f"\n--- Generating plots ---")
+        print("Melody lengths:")
+        self.plot_melody_lengths(output_dir, max_len=max_len)
+        print("\nPitch frequency:")
+        self.plot_pitch_frequency(output_dir)
+        print("\nDuration frequency:")
+        self.plot_duration_frequency(output_dir)
+        self.plot_duration_frequency(output_dir, log_scale=True)
+        print("\nDuration by continent:")
+        self.plot_duration_by_continent(output_dir)
+        print("\nInterval distribution:")
+        self.plot_interval_distribution(output_dir)
+        print("\nBigram heatmap:")
+        self.plot_bigram_heatmap(output_dir)
+        print("\nN-gram counts:")
+        self.plot_ngram_counts(output_dir)
+        print("\nMode proportion:")
+        self.plot_mode_proportion(output_dir)
+ 
+        print(f"\n--- All plots saved to {output_dir}/ ---")
+ 
+        if export_clean:
+            print(f"\n--- Exporting clean corpus ---")
+            self.export_clean_corpus()
+ 
+        return self
+ 
+    def get_melodies_for_transformer(self):
+        """Return clean melodies as list of lists (MIDI pitch integers)."""
+        if self.unique_melodies is None:
+            self.unique_melodies = (
+                self.df_notes.sort_values(["melody_id", "position"])
+                .groupby("melody_id")["midi_pitch"]
+                .apply(list)
+            )
+        return self.unique_melodies.tolist()
+ 
+    def get_melody_ids(self):
+        """Return melody IDs matching the order of get_melodies_for_transformer."""
+        if self.unique_melodies is None:
+            self.get_melodies_for_transformer()
+        return self.unique_melodies.index.tolist()
+ 
+ 
+# =============================================================================
+# MAIN
+# =============================================================================
+ 
 if __name__ == "__main__":
-    main()
+    import sys
+ 
+    if len(sys.argv) < 2:
+        print("Usage: python corpus_eda.py <path_to_corpus> [corpus_name] [label_depth]")
+        print("  label_depth: 2 for Essen (continent/country), 0 for flat (Meertens)")
+        print("Example: python corpus_eda.py data/essen Essen 2")
+        print("         python corpus_eda.py data/meertens Meertens 0")
+        sys.exit(1)
+ 
+    root = sys.argv[1]
+    name = sys.argv[2] if len(sys.argv) > 2 else Path(root).name
+    depth = int(sys.argv[3]) if len(sys.argv) > 3 else 2
+    output = f"eda_{name.lower()}"
+ 
+    cp = CorpusProcessor(root, corpus_name=name, label_depth=depth)
+    cp.run_all(output_dir=output)
