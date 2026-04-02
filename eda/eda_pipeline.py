@@ -2,7 +2,9 @@ import pandas as pd
 import numpy as np
 import os
 import re
+import sys
 import pathlib
+import shutil
 from pathlib import Path
 from typing import List, Optional
 from dataclasses import dataclass
@@ -220,7 +222,6 @@ def kern_to_midi(k_pitch: str) -> int:
 
 def extract_keys(root_path: Path):
     """Extract key and key signature from kern file tandem interpretations."""
-    
     files = sorted(root_path.rglob("*.krn"))
     data = []
     for f in files:
@@ -283,8 +284,8 @@ class CorpusProcessor:
 
             # Extract hierarchical labels based on label_depth
             if self.label_depth >= 2:
-                continent = rel_parts[0] if len(rel_parts) > 1 else "unknown"
-                country = rel_parts[1] if len(rel_parts) > 2 else "unknown"
+                continent = rel_parts[0] if len(rel_parts) > 1 else "Dutch"
+                country = rel_parts[1] if len(rel_parts) > 2 else "Dutch"
             elif self.label_depth == 1:
                 continent = rel_parts[0] if len(rel_parts) > 1 else self.name
                 country = "all"
@@ -323,7 +324,7 @@ class CorpusProcessor:
         print(f"[{self.name}] Total events: {len(self.df_events)}")
 
         # Notes only (no rests), with MIDI pitch
-        self.df_notes = self.df_events[~self.df_events["is_rest"]].copy()
+        self.df_notes = self.df_events[~self.df_events["is_rest"]].copy() 
         self.df_notes["midi_pitch"] = self.df_notes["pitch"].apply(kern_to_midi)
         self.df_notes = self.df_notes.dropna(subset=["midi_pitch"])
         self.df_notes["midi_pitch"] = self.df_notes["midi_pitch"].astype(int)
@@ -339,7 +340,7 @@ class CorpusProcessor:
         1. Has pitched notes (not just rests/comments)
         2. IDyOM-compatible durations — kern durations must produce integer
            ticks at IDyOM's timebase
-        3. No invalid duration strings
+        3. No invalid duration strings (IDyOM compatible)
         4. Minimum length (at least 2 notes for prediction)
 
         Also logs polyphonic files (multi-voice) as informational —
@@ -366,7 +367,7 @@ class CorpusProcessor:
                 reasons.append({"melody_id": mel_id, "path": filepath, "reason": "no_pitched_notes"})
                 continue
 
-            # 2. IDyOM-compatible durations — scan raw kern file
+            # 2. IDyOM-compatible durations, scan raw kern file
             bad_tick_durs = []
             try:
                 raw_text = full_path.read_text(encoding="utf-8", errors="ignore")
@@ -501,31 +502,6 @@ class CorpusProcessor:
 
         return self
 
-    def fix_fractional_durations(self, mapping: dict = None) -> "CorpusProcessor":
-        """
-        Build (or accept) a mapping of fractional → standard kern durations,
-        stored for use during export_clean_corpus.
-
-        Args:
-            mapping: optional dict like {"3/2": "2.", "4/3": "6"}.
-                     If None, auto-converts each fraction to nearest kern duration.
-        """
-        counts = self.scan_fractional_durations()
-        if not counts:
-            print(f"[{self.name}] No fractional durations found.")
-            self._fraction_mapping = {}
-            return self
-
-        if mapping is None:
-            mapping = {frac: _kern_fraction_to_standard(frac) for frac in counts}
-
-        print(f"[{self.name}] Fractional duration mapping:")
-        for frac, kern in sorted(mapping.items()):
-            print(f"  {frac:>8}  →  {kern:<6}  (occurs {counts.get(frac, 0):,} times)")
-
-        self._fraction_mapping = mapping
-        return self
-
     # ── Intervals utility ──
 
     def get_intervals(self):
@@ -566,7 +542,7 @@ class CorpusProcessor:
         n_total = len(lengths)
         n_trunc = (lengths > max_len).sum()
         stats = (f"Total: {n_total}\nMean: {lengths.mean():.1f}\nMedian: {lengths.median():.1f}\n"
-                 f"Truncated (>{max_len}): {n_trunc} ({n_trunc / n_total * 100:.1f}%)")
+                 f"Truncated (>{max_len}): {n_trunc} ({n_trunc/n_total*100:.1f}%)")
         axes[0].text(0.95, 0.95, stats, transform=axes[0].transAxes, va="top", ha="right",
                      fontsize=9, bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.5))
 
@@ -593,7 +569,7 @@ class CorpusProcessor:
         pitch_counts.columns = ["pitch", "count"]
 
         plt.figure(figsize=(10, 6))
-        sns.barplot(data=pitch_counts, x="pitch", y="count", palette="viridis", hue="pitch")
+        sns.barplot(data=pitch_counts, x="pitch", y="count", palette="viridis")
         plt.xticks(rotation=90)
         plt.title(f"Most frequent pitches (top {top_n}) ({self.name})")
         plt.xlabel("Pitch")
@@ -608,21 +584,23 @@ class CorpusProcessor:
         dur_counts.columns = ["duration", "count"]
 
         plt.figure(figsize=(12, 5))
-        sns.barplot(data=dur_counts, x="duration", y="count", palette="viridis", hue="duration")
-        # FIX: only yscale is conditional; labels and layout always apply
+        sns.barplot(data=dur_counts, x="duration", y="count", palette="viridis")
         if log_scale:
             plt.yscale("log")
-        plt.title(f"Most frequent durations ({self.name})")
-        plt.xlabel("Duration (kern)")
+        plt.title(f"Most frequent rhythmic durations ({self.name})")
+        plt.xlabel("Duration (kern reciprocal notation)")
         plt.ylabel("Count" + (" (log)" if log_scale else ""))
         plt.tight_layout()
-
         fname = "duration_freq_log.png" if log_scale else "duration_freq.png"
         plt.savefig(f"{output_dir}/{fname}", dpi=150, bbox_inches="tight")
         plt.close()
 
     def plot_duration_by_continent(self, output_dir, top_n=10):
-        """Duration distribution by continent."""
+        """Duration distribution by continent. Skipped when label_depth=0."""
+        if self.label_depth == 0:
+            print(f"  [{self.name}] Skipping duration_by_continent (flat corpus)")
+            return
+
         order = self.df_events["duration"].value_counts().index[:top_n]
 
         plt.figure(figsize=(12, 5))
@@ -634,41 +612,52 @@ class CorpusProcessor:
         plt.close()
 
     def plot_interval_distribution(self, output_dir):
-        """Pitch interval distribution overall and by continent."""
+        """Pitch interval distribution. Two panels for multi-group, one for flat corpus."""
         if self.df_intervals is None:
             self.get_intervals()
-        # FIX: always assigned, whether intervals were just computed or already existed
         df_int = self.df_intervals
-
-        fig, axes = plt.subplots(1, 2, figsize=(14, 5))
-
         clipped = df_int["interval"].clip(-15, 15)
-        axes[0].hist(clipped, bins=np.arange(-15.5, 16.5, 1), color="#2d5a7b", edgecolor="white", alpha=0.85)
-        axes[0].set_xlabel("Pitch interval (semitones)")
-        axes[0].set_ylabel("Count")
-        axes[0].set_title(f"Pitch interval distribution ({self.name})")
-        axes[0].axvline(x=0, color="red", linestyle="--", alpha=0.5, label="Unison")
-        axes[0].legend()
 
-        continents = [c for c in df_int["continent"].unique()
-                      if df_int[df_int["continent"] == c].shape[0] > 100]
-        for continent in sorted(continents):
-            subset = df_int[df_int["continent"] == continent]["interval"].clip(-15, 15)
-            axes[1].hist(subset, bins=np.arange(-15.5, 16.5, 1), alpha=0.5,
-                         label=continent, density=True)
-        axes[1].set_xlabel("Pitch interval (semitones)")
-        axes[1].set_ylabel("Density")
-        axes[1].set_title(f"Interval distribution by continent ({self.name})")
-        axes[1].legend()
+        if self.label_depth > 0:
+            # Two panels: overall + by continent
+            fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+            axes[0].hist(clipped, bins=np.arange(-15.5, 16.5, 1), color="#2d5a7b", edgecolor="white", alpha=0.85)
+            axes[0].set_xlabel("Pitch interval (semitones)")
+            axes[0].set_ylabel("Count")
+            axes[0].set_title(f"Pitch interval distribution ({self.name})")
+            axes[0].axvline(x=0, color="red", linestyle="--", alpha=0.5, label="Unison")
+            axes[0].legend()
+
+            continents = [c for c in df_int["continent"].unique()
+                          if df_int[df_int["continent"] == c].shape[0] > 100]
+            for continent in sorted(continents):
+                subset = df_int[df_int["continent"] == continent]["interval"].clip(-15, 15)
+                axes[1].hist(subset, bins=np.arange(-15.5, 16.5, 1), alpha=0.5,
+                             label=continent, density=True)
+            axes[1].set_xlabel("Pitch interval (semitones)")
+            axes[1].set_ylabel("Density")
+            axes[1].set_title(f"Interval distribution by continent ({self.name})")
+            axes[1].legend()
+        else:
+            # Single panel for flat corpus
+            fig, ax = plt.subplots(figsize=(8, 5))
+            ax.hist(clipped, bins=np.arange(-15.5, 16.5, 1), color="#2d5a7b", edgecolor="white", alpha=0.85)
+            ax.set_xlabel("Pitch interval (semitones)")
+            ax.set_ylabel("Count")
+            ax.set_title(f"Pitch interval distribution ({self.name})")
+            ax.axvline(x=0, color="red", linestyle="--", alpha=0.5, label="Unison")
+            ax.legend()
 
         plt.tight_layout()
         plt.savefig(f"{output_dir}/interval_distribution.png", dpi=150, bbox_inches="tight")
         plt.close()
 
+        # Print stats
         intervals = df_int["interval"]
         print(f"  Mean interval: {intervals.mean():.2f} semitones")
-        print(f"  Steps (±1-2): {((intervals.abs() >= 1) & (intervals.abs() <= 2)).mean() * 100:.1f}%")
-        print(f"  Leaps (>±5): {(intervals.abs() > 5).mean() * 100:.1f}%")
+        print(f"  Steps (±1-2): {((intervals.abs() >= 1) & (intervals.abs() <= 2)).mean()*100:.1f}%")
+        print(f"  Leaps (>±5): {(intervals.abs() > 5).mean()*100:.1f}%")
 
     def plot_bigram_heatmap(self, output_dir):
         """Pitch class bigram transition heatmap."""
@@ -679,7 +668,7 @@ class CorpusProcessor:
         for mel_id, group in df.sort_values(["melody_id", "position"]).groupby("melody_id"):
             pitches = group["midi_pitch"].values
             for i in range(len(pitches) - 1):
-                transitions[pitches[i] % 12][pitches[i + 1] % 12] += 1
+                transitions[pitches[i] % 12][pitches[i+1] % 12] += 1
 
         row_sums = transitions.sum(axis=1, keepdims=True)
         row_sums[row_sums == 0] = 1
@@ -722,9 +711,8 @@ class CorpusProcessor:
             total = 0
             for mel in melodies_list:
                 for i in range(len(mel) - n + 1):
-                    ngrams.add(tuple(mel[i:i + n]))
+                    ngrams.add(tuple(mel[i:i+n]))
                     total += 1
-            # FIX: update counts after all melodies for this order, not inside loops
             counts_per_order[n] = len(ngrams)
             total_instances[n] = total
 
@@ -739,7 +727,7 @@ class CorpusProcessor:
         axes[0].set_title(f"N-gram counts by order ({self.name})")
         axes[0].set_xticks(orders)
         for bar, count in zip(bars, unique_counts):
-            axes[0].text(bar.get_x() + bar.get_width() / 2, bar.get_height(),
+            axes[0].text(bar.get_x() + bar.get_width()/2, bar.get_height(),
                          f"{count:,}", ha="center", va="bottom", fontsize=8)
 
         coverage = [u / t * 100 for u, t in zip(unique_counts, list(total_instances.values()))]
@@ -761,7 +749,7 @@ class CorpusProcessor:
             print(f"  {n:<8}{counts_per_order[n]:<12,}{total_instances[n]:<12,}{cov:<12.1f}{cumulative:,}")
 
     def plot_mode_proportion(self, output_dir):
-        """Major vs minor mode proportion by continent."""
+        """Major vs minor mode proportion."""
         key_df = extract_keys(self.root)
 
         if key_df["key_tandem"].isna().all():
@@ -769,12 +757,13 @@ class CorpusProcessor:
             return
 
         key_df["mode"] = key_df["key_tandem"].apply(
-            lambda k: "minor" if isinstance(k, str) and len(k) > 1 and k[1].islower()
-            else "major" if isinstance(k, str)
-            else None
+            lambda k: "minor" if isinstance(k, str) and len(k) > 1 and k[1].islower() 
+                      else "major" if isinstance(k, str) 
+                      else None
         )
         key_df = key_df.dropna(subset=["mode"])
-
+        
+        # Use label_depth for grouping
         def get_label(p):
             try:
                 parts = Path(p).relative_to(self.root).parts
@@ -784,22 +773,23 @@ class CorpusProcessor:
                     return self.name
             except ValueError:
                 return self.name
+        
+        key_df["group"] = key_df["path"].apply(get_label)
 
-        key_df["continent"] = key_df["path"].apply(get_label)
-
-        tab = key_df.groupby(["continent", "mode"]).size().unstack(fill_value=0)
+        tab = key_df.groupby(["group", "mode"]).size().unstack(fill_value=0)
         tab_prop = tab.div(tab.sum(axis=1), axis=0)
 
         ax = tab_prop.plot(kind="bar", stacked=True, figsize=(7, 4), colormap="viridis")
         ax.set_ylabel("Proportion")
-        ax.set_xlabel("Continent")
+        xlabel = "Continent" if self.label_depth >= 2 else "Corpus"
+        ax.set_xlabel(xlabel)
         ax.set_title(f"Major vs minor modes ({self.name})")
         ax.legend(title="Mode", bbox_to_anchor=(1.02, 1), loc="upper left")
         plt.tight_layout()
         plt.savefig(f"{output_dir}/mode_proportion.png", dpi=150, bbox_inches="tight")
         plt.close()
 
-    # ── Summary statistics ──
+    # ── Summary statistics ───
 
     def print_summary(self):
         """Print corpus summary statistics."""
@@ -811,9 +801,9 @@ class CorpusProcessor:
         pitch_range = (df["midi_pitch"].min(), df["midi_pitch"].max())
         continents = df["continent"].unique()
 
-        print(f"\n{'=' * 60}")
+        print(f"\n{'='*60}")
         print(f"CORPUS SUMMARY: {self.name}")
-        print(f"{'=' * 60}")
+        print(f"{'='*60}")
         print(f"  Melodies: {n_melodies}")
         print(f"  Total notes: {n_events}")
         print(f"  Unique pitches: {n_unique_pitches}")
@@ -824,7 +814,7 @@ class CorpusProcessor:
         print(f"  Continents/regions: {list(continents)}")
         if self.df_duplicates is not None and len(self.df_duplicates) > 0:
             print(f"  Duplicates removed: {len(self.df_duplicates)}")
-        print(f"{'=' * 60}\n")
+        print(f"{'='*60}\n")
 
     # ── Export clean corpus ──
 
@@ -834,38 +824,39 @@ class CorpusProcessor:
         preserving the original directory structure.
         """
         if output_root is None:
-            output_root = str(self.root) + "_unique"
-
+            output_root = str(self.root) + "_clean"
+        
         output_root = Path(output_root)
+        
+        # Get melody IDs that survived validation and deduplication
         surviving_ids = self.df_notes["melody_id"].unique()
-
+        
         copied = 0
         skipped = 0
-
+        
         for mel_id in surviving_ids:
             if mel_id >= len(self.meta):
                 continue
             mel_meta = self.meta[mel_id]
             rel_path = mel_meta["path"]
-
+            
             src = self.root / rel_path
             dst = output_root / rel_path
-
+            
             if not src.exists():
                 skipped += 1
                 continue
-
-            # FIX: actually copy the file
+            
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, dst)
             copied += 1
-
+        
         print(f"[{self.name}] Exported clean corpus:")
         print(f"  Destination: {output_root}")
         print(f"  Files copied: {copied}")
         if skipped > 0:
             print(f"  Files skipped (not found): {skipped}")
-
+        
         return output_root
 
     # ── Run all ──
@@ -891,30 +882,39 @@ class CorpusProcessor:
         print(f"\n--- Generating plots ---")
         print("Melody lengths:")
         self.plot_melody_lengths(output_dir, max_len=max_len)
-
         print("\nPitch frequency:")
         self.plot_pitch_frequency(output_dir)
-
         print("\nDuration frequency:")
         self.plot_duration_frequency(output_dir)
         self.plot_duration_frequency(output_dir, log_scale=True)
-
         print("\nDuration by continent:")
         self.plot_duration_by_continent(output_dir)
-
         print("\nInterval distribution:")
         self.plot_interval_distribution(output_dir)
-
         print("\nBigram heatmap:")
         self.plot_bigram_heatmap(output_dir)
-
         print("\nN-gram counts:")
         self.plot_ngram_counts(output_dir)
-
         print("\nMode proportion:")
         self.plot_mode_proportion(output_dir)
 
         print(f"\n--- All plots saved to {output_dir}/ ---")
+
+        # Save CSVs
+        print(f"\n--- Saving CSVs ---")
+        mel_df = pd.DataFrame({
+            "melody_id": self.unique_melodies.index,
+            "pitch": self.unique_melodies.values,
+        })
+        mel_df.to_csv(f"{output_dir}/unique_melodies.csv", index=False)
+
+        mel_path_df = (self.df_notes[["melody_id", "filename", "path"]]
+                       .drop_duplicates("melody_id")
+                       .set_index("melody_id"))
+        mel_path_df["pitch"] = self.unique_melodies
+        mel_path_df = mel_path_df.reset_index()
+        mel_path_df.to_csv(f"{output_dir}/unique_meta_melodies.csv", index=False)
+        print(f"  Saved unique_melodies.csv and unique_meta_melodies.csv")
 
         if export_clean:
             print(f"\n--- Exporting clean corpus ---")
@@ -941,21 +941,21 @@ class CorpusProcessor:
 # =============================================================================
 # MAIN
 # =============================================================================
- 
+
 if __name__ == "__main__":
-    import sys
-    
+    # import sys
+
     if len(sys.argv) < 2:
         print("Usage: python corpus_eda.py <path_to_corpus> [corpus_name] [label_depth]")
         print("  label_depth: 2 for Essen (continent/country), 0 for flat (Meertens)")
         print("Example: python corpus_eda.py data/essen Essen 2")
         print("         python corpus_eda.py data/meertens Meertens 0")
         sys.exit(1)
-        
+
     root = sys.argv[1]
     name = sys.argv[2] if len(sys.argv) > 2 else Path(root).name
     depth = int(sys.argv[3]) if len(sys.argv) > 3 else 2
     output = f"eda_{name.lower()}"
-    
+
     cp = CorpusProcessor(root, corpus_name=name, label_depth=depth)
     cp.run_all(output_dir=output)
