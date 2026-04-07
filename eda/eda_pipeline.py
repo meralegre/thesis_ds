@@ -59,6 +59,11 @@ DUR_RE = re.compile(r'^(\d+\.*)')
 KEY_TANDEM_RE = re.compile(r'^\*[A-Ga-g](?:#|-)?:\s*$', re.M)
 KSIG_RE = re.compile(r'^\*k\[[^\]]*\]\s*$', re.M)
 
+NIL_MELODY_FILES = {
+    "NLB186126_02.krn",
+    "NLB196372_01.krn",
+}
+
 # ============================================================================
 # HELPER FUNCTIONS
 # ============================================================================
@@ -172,6 +177,24 @@ def load_kern_melody(path: pathlib.Path, spine=0):
             if ev is not None:
                 out.append(ev)
     return out
+
+# ============================================================================
+# INVALID FILES REMOVAL
+# ============================================================================
+
+def remove_nil_melodies(cp):
+    """
+    Removes the two Meertens melodies that cause IDyOM to raise a TYPE-ERROR
+    due to unidentified null values in the database.
+    """
+    bad_ids = [
+        i for i, m in enumerate(cp.meta)
+        if m["filename"] in NIL_MELODY_FILES
+    ]
+    cp.df_events = cp.df_events[~cp.df_events["melody_id"].isin(bad_ids)].copy()
+    cp.df_notes  = cp.df_notes[~cp.df_notes["melody_id"].isin(bad_ids)].copy()
+    print(f"  Removed melodies with IDyOM-incompatible NIL values: {NIL_MELODY_FILES}")
+    return cp
 
 # ============================================================================
 # PITCH CONVERSION  (kern to MIDI)
@@ -559,7 +582,7 @@ class CorpusProcessor:
         plt.savefig(f"{output_dir}/melody_lengths.png", dpi=150, bbox_inches="tight")
         plt.close()
 
-        for ml in [32, 64, 96, 128, 256]:
+        for ml in [32, 64, 96, 128, 180, 256]:
             pct = (lengths > ml).sum() / n_total * 100
             print(f"  max_len={ml}: {pct:.1f}% truncated")
 
@@ -824,7 +847,7 @@ class CorpusProcessor:
         preserving the original directory structure.
         """
         if output_root is None:
-            output_root = str(self.root) + "_clean"
+            output_root = str(self.root) + "_unique"
         
         output_root = Path(output_root)
         
@@ -867,6 +890,10 @@ class CorpusProcessor:
 
         print(f"\n--- Loading {self.name} ---")
         self.load_corpus()
+
+        if "meertens" in self.name.lower():
+            print(f"\n--- Removing IDyOM NIL melodies (Meertens only) ---")
+            remove_nil_melodies(self)
 
         print(f"\n--- Validating ---")
         self.validate_corpus(remove_invalid=True)
@@ -912,6 +939,7 @@ class CorpusProcessor:
                        .drop_duplicates("melody_id")
                        .set_index("melody_id"))
         mel_path_df["pitch"] = self.unique_melodies
+        mel_path_df["path"] = mel_path_df["path"].apply(lambda p: str(self.root / p))
         mel_path_df = mel_path_df.reset_index()
         mel_path_df.to_csv(f"{output_dir}/unique_meta_melodies.csv", index=False)
         print(f"  Saved unique_melodies.csv and unique_meta_melodies.csv")

@@ -578,26 +578,26 @@ for i in idxs:
 
 #+RESULTS:
 #+begin_example
-8322 asia china natmn066.krn len: 101
-2137 europa deutschl deut3985.krn len: 94
-1050 europa deutschl deut2549.krn len: 72
-6780 asia china shanx479.krn len: 27
-8393 asia china natmn068.krn len: 32
-3663 europa deutschl deut0689.krn len: 42
-7621 asia china han1039.krn len: 120
-6366 asia china shanx228.krn len: 78
-2485 europa deutschl deut4945.krn len: 62
-3110 europa deutschl deut1903.krn len: 69
-635 europa deutschl deut3232.krn len: 36
-5740 europa nederlan neder044.krn len: 45
-1796 europa deutschl kindr210.krn len: 22
-3821 europa deutschl deut0718.krn len: 52
-395 europa deutschl deut3050.krn len: 29
-3384 europa deutschl deut1792.krn len: 113
-133 europa deutschl deut4206.krn len: 75
-8446 asia china natmn194.krn len: 44
-5717 europa nederlan neder016.krn len: 52
-6937 asia china shanx197.krn len: 32
+8110 asia china han0982.krn len: 66
+3031 europa deutschl deut2006.krn len: 28
+2317 europa deutschl deut4918.krn len: 52
+5094 europa deutschl deut562.krn len: 53
+5793 europa ukraina ukrain03.krn len: 30
+6784 asia china shanx323.krn len: 49
+1899 europa deutschl kindr023.krn len: 21
+3572 europa deutschl deut2074.krn len: 30
+1295 europa deutschl deut2458.krn len: 38
+2623 europa deutschl deut5107.krn len: 37
+7140 asia china han1114.krn len: 53
+2513 europa deutschl deut5045.krn len: 43
+7397 asia china han0493.krn len: 86
+7179 asia china han0343.krn len: 218
+2405 europa deutschl deut4854.krn len: 32
+8459 asia china natmn183.krn len: 115
+8170 asia china han1045.krn len: 23
+4373 europa deutschl deut1671.krn len: 50
+1404 europa deutschl deut2330.krn len: 131
+4037 europa deutschl deut1398.krn len: 42
 #+end_example
 
 #+begin_src python :results output
@@ -645,12 +645,12 @@ print(df_vp.sample(5))
 
 #+RESULTS:
 : (464343, 10)
-:             filename                                            path continent   country  ...  position  pitch  duration is_rest
-: 154197  deut1041.krn  ../data/essen/europa/deutschl/erk/deut1041.krn    europa  deutschl  ...        38     ee         4   False
-: 288186  suisse30.krn       ../data/essen/europa/schweiz/suisse30.krn    europa   schweiz  ...         2     b-         4   False
-: 214618  deut1699.krn  ../data/essen/europa/deutschl/erk/deut1699.krn    europa  deutschl  ...        34      a         4   False
-: 244598   deut497.krn  ../data/essen/europa/deutschl/fink/deut497.krn    europa  deutschl  ...        17      c         8   False
-: 460570  natmn030.krn    ../data/essen/asia/china/natmin/natmn030.krn      asia     china  ...       193      a         8   False
+:             filename                                               path  ... duration is_rest
+: 104220  deut3967.krn  ../data/essen/europa/deutschl/altdeu1/deut3967...  ...        2    True
+: 90502   deut2752.krn  ../data/essen/europa/deutschl/boehme/deut2752.krn  ...        8   False
+: 104190  deut3797.krn  ../data/essen/europa/deutschl/altdeu1/deut3797...  ...        2   False
+: 96915   kindr118.krn  ../data/essen/europa/deutschl/kinder/kindr118.krn  ...        8   False
+: 107085  deut3787.krn  ../data/essen/europa/deutschl/altdeu1/deut3787...  ...        2   False
 : 
 : [5 rows x 10 columns]
 
@@ -660,22 +660,22 @@ print(df_vp.head(15))
 
 #+RESULTS:
 #+begin_example
-        filename                                    path continent country  ...  position  pitch  duration is_rest
-0   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         0      a        8.   False
-1   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         1      b        16   False
-2   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         2    ccn         8   False
-3   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         3      b        8.   False
-4   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         4      a        16   False
-5   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         5     g#         8   False
-6   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         6      a        8.   False
-7   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         7      b        16   False
-8   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         8    ccn         8   False
-9   island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...         9      b         4   False
-10  island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...        10      r         8    True
-11  island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...        11      b         4   False
-12  island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...        12      b         8   False
-13  island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...        13    ccn         4   False
-14  island02.krn  ../data/essen/europa/misc/island02.krn    europa    misc  ...        14     dd         8   False
+        filename                                    path continent  ... pitch  duration  is_rest
+0   island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...     a        8.    False
+1   island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...     b        16    False
+2   island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...   ccn         8    False
+3   island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...     b        8.    False
+4   island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...     a        16    False
+5   island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...    g#         8    False
+6   island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...     a        8.    False
+7   island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...     b        16    False
+8   island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...   ccn         8    False
+9   island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...     b         4    False
+10  island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...     r         8     True
+11  island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...     b         4    False
+12  island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...     b         8    False
+13  island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...   ccn         4    False
+14  island02.krn  ../data/essen/europa/misc/island02.krn    europa  ...    dd         8    False
 
 [15 rows x 10 columns]
 #+end_example
@@ -749,16 +749,16 @@ Original length of full dataframe: 8472
 How many melodies are duplicates of others: 269
 How many unique melodies are in the corpus: 8203
 melody_id
-3832    ((d, 8), (b, 8), (g, 8), (dd, 8), (b, 8), (b, ...
-2605    ((f, 4), (b-, 2), (b-, 4), (f, 2), (ee-, 4), (...
-6714    ((ee, 8), (ee, 8), (b, 4), (dd, 8), (ff#, 4), ...
-6230    ((a, 4), (a, 4), (b, 4), (r, 4), (a, 4), (a, 4...
-7613    ((aa, 8.), (bb, 16), (eee, 8), (ccc#, 8), (bb,...
-4814    ((ee, 8), (cc#, 8), (a, 8), (b, 8), (g#, 8), (...
-517     ((c, 16), (e, 16), (g, 8), (a, 8), (g, 8), (d,...
-7308    ((dd, 8), (ee, 8), (dd, 8), (ee, 16), (ee, 16)...
-5861    ((G, 8), (c, 4), (e, 8), (f, 8), (e, 8), (c, 8...
-527     ((f, 4), (a, 4), (f, 4), (a, 8), (a, 8), (cc, ...
+3152    ((g, 8), (a, 8), (b, 4), (b, 4), (b, 4), (a, 8...
+6116    ((g, 2), (e, 4), (e, 4), (e, 4), (e, 4), (e, 2...
+4511    ((d, 8), (g, 8.), (d, 16), (g, 8), (a, 8), (b,...
+4967    ((ee, 8), (ee, 8), (ff#, 8), (dd, 8), (ee, 8),...
+7942    ((bb, 8), (aa, 8), (bb, 8), (ff#, 8), (ff#, 2)...
+3812    ((c, 4), (e, 4), (g, 8.), (g, 16), (g, 4), (ee...
+2670    ((G, 4), (c, 2), (d, 4), (e, 2), (f, 4), (g, 4...
+5718    ((f, 4), (f, 2), (e, 4), (d, 2), (c, 4), (f, 2...
+2280    ((f, 2), (a, 2), (a, 2), (b-, 1), (cc, 1), (a,...
+4754    ((c, 8), (f, 4), (f, 8), (a, 8), (g, 8), (f, 8...
 Name: signatures, dtype: object
 #+end_example
 
@@ -1352,18 +1352,14 @@ print(df_unique.sample(5))
 
 #+RESULTS:
 : (449328, 10)
-:            filename                                               path continent  ... pitch  duration  is_rest
-: 400774  han0857.krn    ../data/essen_unique/asia/china/han/han0857.krn      asia  ...     g         8    False
-: 372947  han0294.krn    ../data/essen_unique/asia/china/han/han0294.krn      asia  ...    gg        8.    False
-: 254584  deut100.krn  ../data/essen_unique/europa/deutschl/fink/deut...    europa  ...     G         8    False
-: 291649   ussr32.krn     ../data/essen_unique/europa/rossiya/ussr32.krn    europa  ...     b         8    False
-: 421270  han0388.krn    ../data/essen_unique/asia/china/han/han0388.krn      asia  ...    dd        16    False
+:             filename                                               path  ... duration is_rest
+: 435218  natmn004.krn  ../data/essen_unique/asia/china/natmin/natmn00...  ...       4.   False
+: 82406   deut2594.krn  ../data/essen_unique/europa/deutschl/boehme/de...  ...        8   False
+: 295639  jugos024.krn  ../data/essen_unique/europa/jugoslav/jugos024.krn  ...        4   False
+: 348921   han0961.krn    ../data/essen_unique/asia/china/han/han0961.krn  ...        8   False
+: 330894  shanx121.krn  ../data/essen_unique/asia/china/shanxi/shanx12...  ...        8   False
 : 
 : [5 rows x 10 columns]
-
-#+begin_src python :results output
-
-#+end_src
 
 ** Pitch representation
 
@@ -1455,17 +1451,17 @@ print(df_notes.sample(10))
 
 #+RESULTS:
 #+begin_example
-            filename                                               path continent  ... pitch  duration  midi_pitch
-199641  deut0861.krn  ../data/essen_unique/europa/deutschl/erk/deut0...    europa  ...    cc         8          72
-269186  deut4434.krn  ../data/essen_unique/europa/deutschl/dva/deut4...    europa  ...     b         8          71
-218921  deut1103.krn  ../data/essen_unique/europa/deutschl/erk/deut1...    europa  ...    b-         8          70
-161756  deut1442.krn  ../data/essen_unique/europa/deutschl/erk/deut1...    europa  ...     d         4          62
-30333   deut3391.krn  ../data/essen_unique/europa/deutschl/ballad/de...    europa  ...     a         4          69
-147022  deut4726.krn  ../data/essen_unique/europa/deutschl/zuccal/de...    europa  ...     b         8          71
-30370   deut3385.krn  ../data/essen_unique/europa/deutschl/ballad/de...    europa  ...    b-         4          70
-77345   deut2863.krn  ../data/essen_unique/europa/deutschl/boehme/de...    europa  ...     d         8          62
-424216   han0202.krn    ../data/essen_unique/asia/china/han/han0202.krn      asia  ...     b         8          71
-67155   deut2523.krn  ../data/essen_unique/europa/deutschl/boehme/de...    europa  ...     b        4.          71
+            filename                                               path  ... duration midi_pitch
+322700  shanx118.krn  ../data/essen_unique/asia/china/shanxi/shanx11...  ...        8         74
+212916  deut0752.krn  ../data/essen_unique/europa/deutschl/erk/deut0...  ...        4         70
+198476  deut1809.krn  ../data/essen_unique/europa/deutschl/erk/deut1...  ...        8         72
+123017  deut5084.krn  ../data/essen_unique/europa/deutschl/zuccal/de...  ...        8         54
+85483   deut2383.krn  ../data/essen_unique/europa/deutschl/boehme/de...  ...        8         72
+93748   kindr002.krn  ../data/essen_unique/europa/deutschl/kinder/ki...  ...        8         70
+87326   deut2747.krn  ../data/essen_unique/europa/deutschl/boehme/de...  ...        4         72
+18315   deut4121.krn  ../data/essen_unique/europa/deutschl/altdeu2/d...  ...        1         72
+128869  deut4821.krn  ../data/essen_unique/europa/deutschl/zuccal/de...  ...        8         64
+191678  deut1758.krn  ../data/essen_unique/europa/deutschl/erk/deut1...  ...        4         65
 
 [10 rows x 10 columns]
 #+end_example
@@ -1534,17 +1530,17 @@ print(xinhua.head(10))
 
 #+RESULTS:
 #+begin_example
-           filename                                               path continent  ... pitch  duration  midi_pitch
-342330  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     c         4          60
-342331  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...    dd         8          74
-342332  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     g         8          67
-342333  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     c         4          60
-342334  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...    ee         8          76
-342335  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     g         8          67
-342336  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     c         4          60
-342337  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...    gg         4          79
-342338  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...    gg         2          79
-342339  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...      asia  ...     c         4          60
+           filename                                               path  ... duration midi_pitch
+342330  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...  ...        4         60
+342331  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...  ...        8         74
+342332  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...  ...        8         67
+342333  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...  ...        4         60
+342334  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...  ...        8         76
+342335  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...  ...        8         67
+342336  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...  ...        4         60
+342337  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...  ...        4         79
+342338  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...  ...        2         79
+342339  china01.krn  ../data/essen_unique/asia/china/xinhua/china01...  ...        4         60
 
 [10 rows x 10 columns]
 #+end_example
@@ -1568,16 +1564,16 @@ unique_melodies.to_csv("../data/essen_unique_melodies.csv", index=False)
 #+RESULTS:
 #+begin_example
       melody_id                                              pitch
-5955       5955  [64, 69, 69, 69, 71, 72, 72, 72, 71, 69, 69, 6...
-4834       4834  [65, 70, 72, 74, 72, 74, 75, 74, 72, 70, 72, 6...
-2459       2459  [62, 67, 71, 69, 67, 66, 64, 62, 62, 64, 67, 6...
-2563       2563  [67, 62, 62, 59, 62, 67, 67, 67, 71, 71, 69, 7...
-5729       5729  [72, 72, 72, 72, 72, 74, 74, 67, 69, 70, 74, 7...
-6790       6790  [57, 59, 62, 64, 64, 59, 62, 66, 64, 62, 64, 6...
-6210       6210  [74, 69, 72, 74, 67, 65, 67, 62, 60, 74, 69, 7...
-414         414  [62, 67, 67, 66, 64, 64, 66, 67, 69, 69, 66, 6...
-810         810  [62, 67, 67, 69, 69, 71, 71, 69, 67, 67, 69, 6...
-8094       8094  [64, 64, 69, 67, 69, 57, 62, 62, 64, 67, 69, 6...
+3069       3069  [67, 69, 71, 71, 69, 67, 67, 69, 71, 71, 69, 6...
+5503       5503  [60, 67, 67, 67, 65, 64, 62, 70, 69, 67, 69, 6...
+602         602  [62, 67, 67, 69, 69, 71, 71, 67, 71, 71, 74, 7...
+2804       2804  [64, 69, 69, 71, 69, 71, 72, 71, 71, 72, 74, 7...
+2509       2509  [66, 67, 69, 66, 71, 69, 69, 61, 64, 64, 66, 6...
+5064       5064  [69, 66, 74, 69, 67, 64, 76, 69, 69, 74, 74, 7...
+1236       1236  [65, 70, 70, 74, 70, 70, 65, 70, 65, 70, 74, 7...
+1905       1905  [67, 64, 69, 67, 64, 67, 67, 64, 69, 67, 64, 6...
+5764       5764  [60, 60, 65, 65, 65, 65, 69, 65, 69, 67, 65, 6...
+568         568  [67, 72, 71, 69, 67, 74, 71, 69, 67, 67, 72, 7...
 #+end_example
 
 We'll make two csv files, one with the paths and the filename so that when it comes to splitting the data later on
@@ -1595,16 +1591,16 @@ unique_melodies_meta.to_csv("../data/essen_meta_unique_melodies.csv", index=Fals
 #+RESULTS:
 #+begin_example
       melody_id  ...                                               path
-2293       2293  ...  ../data/essen_unique/europa/deutschl/zuccal/de...
-1282       1282  ...  ../data/essen_unique/europa/deutschl/boehme/de...
-6554       6554  ...  ../data/essen_unique/asia/china/shanxi/shanx53...
-8018       8018  ...  ../data/essen_unique/asia/china/natmin/natmn00...
-3838       3838  ...  ../data/essen_unique/europa/deutschl/erk/deut0...
-2581       2581  ...  ../data/essen_unique/europa/deutschl/zuccal/de...
-6687       6687  ...  ../data/essen_unique/asia/china/shanxi/shanx19...
-4478       4478  ...  ../data/essen_unique/europa/deutschl/erk/deut1...
-58           58  ...  ../data/essen_unique/europa/deutschl/altdeu2/d...
-5349       5349  ...    ../data/essen_unique/europa/magyar/magyar24.krn
+5154       5154  ...  ../data/essen_unique/europa/deutschl/dva/deut4...
+2291       2291  ...  ../data/essen_unique/europa/deutschl/zuccal/de...
+5146       5146  ...  ../data/essen_unique/europa/deutschl/dva/deut4...
+4412       4412  ...  ../data/essen_unique/europa/deutschl/erk/deut0...
+760         760  ...  ../data/essen_unique/europa/deutschl/ballad/de...
+164         164  ...  ../data/essen_unique/europa/deutschl/altdeu2/d...
+7085       7085  ...    ../data/essen_unique/asia/china/han/han0609.krn
+7949       7949  ...    ../data/essen_unique/asia/china/han/han1047.krn
+3549       3549  ...  ../data/essen_unique/europa/deutschl/erk/deut1...
+2341       2341  ...  ../data/essen_unique/europa/deutschl/zuccal/de...
 
 [10 rows x 4 columns]
 #+end_example
@@ -2305,20 +2301,20 @@ print(fold_assignments.sample(10))
 #+RESULTS:
 #+begin_example
        melody_id  fold  split                                               path
-1827        2027     1  train  ../data/essen_unique/europa/deutschl/altdeu1/d...
-81756       5536    10   test  ../data/essen_unique/europa/lothring/lothr027.krn
-15849       2388     2   test  ../data/essen_unique/europa/deutschl/zuccal/de...
-16132       5292     2   test   ../data/essen_unique/europa/danmark/danmark5.krn
-32153       1710     4   test  ../data/essen_unique/europa/deutschl/boehme/de...
-15268       7843     2  train    ../data/essen_unique/asia/china/han/han0955.krn
-2242        2487     1  train  ../data/essen_unique/europa/deutschl/zuccal/de...
-76806       3307    10  train  ../data/essen_unique/europa/deutschl/erk/deut0...
-22161       6404     3  train  ../data/essen_unique/asia/china/shanxi/shanx13...
-40519       3166     5   test  ../data/essen_unique/europa/deutschl/erk/deut1...
+19053       2956     3  train  ../data/essen_unique/europa/deutschl/erk/deut2...
+64423       7776     8  train    ../data/essen_unique/asia/china/han/han0767.krn
+75925       2307    10  train  ../data/essen_unique/europa/deutschl/zuccal/de...
+32892         89     5  train  ../data/essen_unique/europa/deutschl/altdeu2/d...
+10737       2832     2  train  ../data/essen_unique/europa/deutschl/zuccal/de...
+33417        696     5  train  ../data/essen_unique/europa/deutschl/ballad/de...
+31691       7868     4  train    ../data/essen_unique/asia/china/han/han1118.krn
+42731       1880     6  train  ../data/essen_unique/europa/deutschl/kinder/ki...
+74200        403    10  train  ../data/essen_unique/europa/deutschl/ballad/de...
+695          774     1  train  ../data/essen_unique/europa/deutschl/ballad/de...
 #+end_example
 
 #+begin_src python :results output
-output_dir = Path("../data/idyom_folds")
+output_dir = Path("../data/essen_idyom_folds")
 
 for fold in fold_assignments["fold"].unique():
     fold_data = fold_assignments[fold_assignments["fold"] == fold]
@@ -2335,4 +2331,47 @@ print("Done:", list(output_dir.glob("*/*")))
 #+end_src
 
 #+RESULTS:
-: Done: [PosixPath('../data/idyom_folds/fold_4/test'), PosixPath('../data/idyom_folds/fold_4/train'), PosixPath('../data/idyom_folds/fold_3/test'), PosixPath('../data/idyom_folds/fold_3/train'), PosixPath('../data/idyom_folds/fold_2/test'), PosixPath('../data/idyom_folds/fold_2/train'), PosixPath('../data/idyom_folds/fold_5/test'), PosixPath('../data/idyom_folds/fold_5/train'), PosixPath('../data/idyom_folds/fold_10/test'), PosixPath('../data/idyom_folds/fold_10/train'), PosixPath('../data/idyom_folds/fold_9/test'), PosixPath('../data/idyom_folds/fold_9/train'), PosixPath('../data/idyom_folds/fold_7/test'), PosixPath('../data/idyom_folds/fold_7/train'), PosixPath('../data/idyom_folds/fold_6/test'), PosixPath('../data/idyom_folds/fold_6/train'), PosixPath('../data/idyom_folds/fold_1/test'), PosixPath('../data/idyom_folds/fold_1/train'), PosixPath('../data/idyom_folds/fold_8/test'), PosixPath('../data/idyom_folds/fold_8/train')]
+: Done: [PosixPath('../data/essen_idyom_folds/fold_4/test'), PosixPath('../data/essen_idyom_folds/fold_4/train'), PosixPath('../data/essen_idyom_folds/fold_3/test'), PosixPath('../data/essen_idyom_folds/fold_3/train'), PosixPath('../data/essen_idyom_folds/fold_2/test'), PosixPath('../data/essen_idyom_folds/fold_2/train'), PosixPath('../data/essen_idyom_folds/fold_5/test'), PosixPath('../data/essen_idyom_folds/fold_5/train'), PosixPath('../data/essen_idyom_folds/fold_10/test'), PosixPath('../data/essen_idyom_folds/fold_10/train'), PosixPath('../data/essen_idyom_folds/fold_9/test'), PosixPath('../data/essen_idyom_folds/fold_9/train'), PosixPath('../data/essen_idyom_folds/fold_7/test'), PosixPath('../data/essen_idyom_folds/fold_7/train'), PosixPath('../data/essen_idyom_folds/fold_6/test'), PosixPath('../data/essen_idyom_folds/fold_6/train'), PosixPath('../data/essen_idyom_folds/fold_1/test'), PosixPath('../data/essen_idyom_folds/fold_1/train'), PosixPath('../data/essen_idyom_folds/fold_8/test'), PosixPath('../data/essen_idyom_folds/fold_8/train')]
+
+** Meertens
+
+#+begin_src python :results output
+meertens_folds = pd.read_csv("../data/meertens_folds_assignments.csv")
+meertens_folds = meertens_folds.drop("pitch", axis=1)
+print(meertens_folds.sample(10))
+#+end_src
+
+#+RESULTS:
+#+begin_example
+        melody_id  fold  split          filename                                     path
+107453      12763     7  train  NLB072469_01.krn  ../data/meertens_clean/NLB072469_01.krn
+140602      14054     9  train  NLB076112_01.krn  ../data/meertens_clean/NLB076112_01.krn
+52648        5171     4  train  NLB181038_01.krn  ../data/meertens_clean/NLB181038_01.krn
+75626       12947     5  train  NLB071974_02.krn  ../data/meertens_clean/NLB071974_02.krn
+69182        5798     5  train  NLB182865_01.krn  ../data/meertens_clean/NLB182865_01.krn
+134007       6688     9  train  NLB151519_01.krn  ../data/meertens_clean/NLB151519_01.krn
+113423       1614     8  train  NLB165442_01.krn  ../data/meertens_clean/NLB165442_01.krn
+56814        9806     4  train  NLB150144_01.krn  ../data/meertens_clean/NLB150144_01.krn
+23307        8109     2  train  NLB141812_01.krn  ../data/meertens_clean/NLB141812_01.krn
+20598        5102     2  train  NLB076212_01.krn  ../data/meertens_clean/NLB076212_01.krn
+#+end_example
+
+#+begin_src python :results output
+output_dir = Path("../data/meertens_idyom_folds")
+
+for fold in meertens_folds["fold"].unique():
+    fold_data = meertens_folds[meertens_folds["fold"] == fold]
+    
+    for split in ["train", "test"]:
+        split_dir = output_dir / f"fold_{fold}" / split
+        split_dir.mkdir(parents=True, exist_ok=True)
+        
+        paths = fold_data[fold_data["split"] == split]["path"]
+        for p in paths:
+            shutil.copy(p, split_dir)
+
+print("Done:", list(output_dir.glob("*/*")))
+#+end_src
+
+#+RESULTS:
+: Done: [PosixPath('../data/meertens_idyom_folds/fold_4/test'), PosixPath('../data/meertens_idyom_folds/fold_4/train'), PosixPath('../data/meertens_idyom_folds/fold_3/test'), PosixPath('../data/meertens_idyom_folds/fold_3/train'), PosixPath('../data/meertens_idyom_folds/fold_2/test'), PosixPath('../data/meertens_idyom_folds/fold_2/train'), PosixPath('../data/meertens_idyom_folds/fold_5/test'), PosixPath('../data/meertens_idyom_folds/fold_5/train'), PosixPath('../data/meertens_idyom_folds/fold_10/test'), PosixPath('../data/meertens_idyom_folds/fold_10/train'), PosixPath('../data/meertens_idyom_folds/fold_9/test'), PosixPath('../data/meertens_idyom_folds/fold_9/train'), PosixPath('../data/meertens_idyom_folds/fold_7/test'), PosixPath('../data/meertens_idyom_folds/fold_7/train'), PosixPath('../data/meertens_idyom_folds/fold_6/test'), PosixPath('../data/meertens_idyom_folds/fold_6/train'), PosixPath('../data/meertens_idyom_folds/fold_1/test'), PosixPath('../data/meertens_idyom_folds/fold_1/train'), PosixPath('../data/meertens_idyom_folds/fold_8/test'), PosixPath('../data/meertens_idyom_folds/fold_8/train')]
