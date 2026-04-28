@@ -974,10 +974,10 @@ if __name__ == "__main__":
     # import sys
 
     if len(sys.argv) < 2:
-        print("Usage: python corpus_eda.py <path_to_corpus> [corpus_name] [label_depth]")
+        print("Usage: python eda_pipeline.py <path_to_corpus> [corpus_name] [label_depth]")
         print("  label_depth: 2 for Essen (continent/country), 0 for flat (Meertens)")
-        print("Example: python corpus_eda.py data/essen Essen 2")
-        print("         python corpus_eda.py data/meertens Meertens 0")
+        print("Example: python eda_pipeline.py data/essen Essen 2")
+        print("         python eda_pipeline.py data/meertens Meertens 0")
         sys.exit(1)
 
     root = sys.argv[1]
