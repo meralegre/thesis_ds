@@ -6,7 +6,6 @@
 
 * Manual Preprocessing
 ** Imports
-
 #+begin_src python :results silent
 import pandas as pd
 import numpy as np

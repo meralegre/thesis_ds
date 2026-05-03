@@ -264,6 +264,42 @@ def extract_keys(root_path: Path):
         
     return pd.DataFrame(data)
 
+
+def key_tandem_to_tonic_pc(key_tandem):
+    """
+    Convert kern key tandem interpretation to tonic pitch class (0-11).
+
+    Kern key tandems use uppercase for major and lowercase for minor.
+    The tonic pitch class is the same regardless of mode.
+
+    Examples:
+        '*C:'  → 0   (C major)
+        '*c:'  → 0   (C minor)
+        '*G:'  → 7   (G major)
+        '*d:'  → 2   (D minor)
+        '*e-:' → 3   (Eb minor)
+        '*F#:' → 6   (F# major)
+    """
+    if not isinstance(key_tandem, str) or len(key_tandem) < 3:
+        return None
+
+    note_map = {'c': 0, 'd': 2, 'e': 4, 'f': 5, 'g': 7, 'a': 9, 'b': 11}
+
+    letter = key_tandem[1].lower()
+    if letter not in note_map:
+        return None
+
+    pc = note_map[letter]
+
+    rest = key_tandem[2:]
+    if rest.startswith('#'):
+        pc = (pc + 1) % 12
+    elif rest.startswith('-'):
+        pc = (pc - 1) % 12
+
+    return pc
+
+
 # =============================================================================
 # CORPUS PROCESSOR
 # =============================================================================
@@ -941,6 +977,14 @@ class CorpusProcessor:
         mel_path_df["pitch"] = self.unique_melodies
         mel_path_df["path"] = mel_path_df["path"].apply(lambda p: str(self.root / p))
         mel_path_df = mel_path_df.reset_index()
+
+        # Merge tonic pitch class from key tandem interpretations
+        key_df = extract_keys(self.root)
+        key_df["tonic_pc"] = key_df["key_tandem"].apply(key_tandem_to_tonic_pc)
+        mel_path_df = mel_path_df.merge(key_df[["path", "tonic_pc"]], on="path", how="left")
+        n_keys = mel_path_df["tonic_pc"].notna().sum()
+        print(f"  Key information found for {n_keys}/{len(mel_path_df)} melodies")
+
         mel_path_df.to_csv(f"{output_dir}/unique_meta_melodies.csv", index=False)
         print(f"  Saved unique_melodies.csv and unique_meta_melodies.csv")
 
