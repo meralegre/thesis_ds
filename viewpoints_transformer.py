@@ -5,9 +5,19 @@ import keras
 from keras import layers, ops
 from sklearn.model_selection import KFold
 import tempfile
+
 import os
 import ast
+import json
+import argparse
 
+os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
+os.environ["XLA_FLAGS"] = "--xla_gpu_enable_triton_gemm=false"
+os.environ["TF_GPU_ALLOCATOR"] = "cuda_malloc_async"
+
+# ====================================================
+# INTERVAL PARAMS
+# ====================================================
 def get_fixed_interval_params():
     """
     Fixed interval vocabulary covering [-48, +48] semitones (4 octaves).
@@ -35,12 +45,21 @@ def tonic_pc_to_midi(tonic_pc, first_pitch):
     return min(options, key=lambda x: abs(x - first_pitch))
 
 
-def prepare_melodies_sliding(melodies, window_size=16, pitch_to_idx=None,
-                            interval_offset=None, interval_vocab_size=None,
-                            tonic_map=None, melody_ids=None):
+# ====================================================
+# DATA PREPARATION
+# ====================================================
+def prepare_melodies_sliding(
+    melodies,
+    window_size=10,
+    pitch_to_idx=None,
+    interval_offset=None,
+    interval_vocab_size=None,
+    tonic_map=None,
+    melody_ids=None
+):
     """
     Create sliding-window training examples with five input features
-    matching IDyOM's best viewpoint: (cpint (cpcint cpintfip) (cpitch cpintfref))
+    matching IDyOM's best viewpoint: ((cpintfip cpintfref) (cpcint cpintfip) (cpitch cpintfref))
     """
     if pitch_to_idx is None:
         all_pitches = sorted(set(p for mel in melodies for p in mel))
@@ -57,7 +76,6 @@ def prepare_melodies_sliding(melodies, window_size=16, pitch_to_idx=None,
     CPCINT_VOCAB_SIZE = 13
 
     xs_pitch = []
-    xs_cpint = []
     xs_cpcint = []
     xs_cpintfip = []
     xs_cpintfref = []
@@ -93,12 +111,7 @@ def prepare_melodies_sliding(melodies, window_size=16, pitch_to_idx=None,
             context = indexed[start:t]
             raw_context = raw[start:t]
 
-            # cpint: interval from previous note
-            raw_cpint = [0]
-            for i in range(1, len(raw_context)):
-                raw_cpint.append(raw_context[i] - raw_context[i - 1])
-
-            # cpcint: pitch-class interval (cpint mod 12)
+            # cpcint: pitch-class interval (intervals mod 12)
             raw_cpcint = [0]
             for i in range(1, len(raw_context)):
                 raw_cpcint.append((raw_context[i] - raw_context[i - 1]) % 12)
@@ -113,12 +126,6 @@ def prepare_melodies_sliding(melodies, window_size=16, pitch_to_idx=None,
             pad_len = window_size - len(context)
 
             pitch_seq = [PAD] * pad_len + context
-
-            cpint_seq = [PAD] * pad_len
-            for iv in raw_cpint:
-                shifted = iv + interval_offset
-                shifted = max(1, min(shifted, interval_vocab_size - 1))
-                cpint_seq.append(shifted)
 
             cpcint_seq = [PAD] * pad_len
             for iv in raw_cpcint:
@@ -137,7 +144,6 @@ def prepare_melodies_sliding(melodies, window_size=16, pitch_to_idx=None,
                 cpintfref_seq.append(shifted)
 
             xs_pitch.append(pitch_seq)
-            xs_cpint.append(cpint_seq)
             xs_cpcint.append(cpcint_seq)
             xs_cpintfip.append(cpintfip_seq)
             xs_cpintfref.append(cpintfref_seq)
@@ -150,11 +156,21 @@ def prepare_melodies_sliding(melodies, window_size=16, pitch_to_idx=None,
     if tonic_map is not None:
         print(f"  Tonic info: {n_with_tonic} melodies with key, {n_without_tonic} using first-pitch fallback")
 
-    return (np.array(xs_pitch), np.array(xs_cpint), np.array(xs_cpcint),
-            np.array(xs_cpintfip), np.array(xs_cpintfref), np.array(ys),
-            vocab_size, pitch_to_idx, idx_to_pitch)
+    return (
+        np.array(xs_pitch),
+        np.array(xs_cpcint),
+        np.array(xs_cpintfip),
+        np.array(xs_cpintfref),
+        np.array(ys),
+        vocab_size,
+        pitch_to_idx,
+        idx_to_pitch
+    )
 
 
+# ====================================================
+# MODEL COMPONENTS
+# ====================================================
 class TokenAndPositionEmbedding(layers.Layer):
     """Embeds tokens and adds learned positional encoding."""
 
@@ -227,7 +243,7 @@ def build_transformer(
     vocab_size,
     interval_vocab_size,
     cpcint_vocab_size=13,
-    window_size=16,
+    window_size=10,
     embed_dim=64,
     num_heads=4,
     ff_dim=128,
@@ -240,7 +256,6 @@ def build_transformer(
     Each viewpoint gets its own embedding.
     """
     pitch_input = keras.Input(shape=(window_size,), name="pitch")
-    cpint_input = keras.Input(shape=(window_size,), name="cpint")
     cpcint_input = keras.Input(shape=(window_size,), name="cpcint")
     cpintfip_input = keras.Input(shape=(window_size,), name="cpintfip")
     cpintfref_input = keras.Input(shape=(window_size,), name="cpintfref")
@@ -249,13 +264,12 @@ def build_transformer(
     pitch_emb = TokenAndPositionEmbedding(window_size, vocab_size, embed_dim)(pitch_input)
 
     # Viewpoint embeddings (no positional encoding)
-    cpint_emb = layers.Embedding(interval_vocab_size, embed_dim)(cpint_input)
     cpcint_emb = layers.Embedding(cpcint_vocab_size, embed_dim)(cpcint_input)
     cpintfip_emb = layers.Embedding(interval_vocab_size, embed_dim)(cpintfip_input)
     cpintfref_emb = layers.Embedding(interval_vocab_size, embed_dim)(cpintfref_input)
 
     # Combine all streams
-    x = layers.Add()([pitch_emb, cpint_emb, cpcint_emb, cpintfip_emb, cpintfref_emb])
+    x = layers.Add()([pitch_emb, cpcint_emb, cpintfip_emb, cpintfref_emb])
 
     for _ in range(num_layers):
         x = SlidingWindowTransformerBlock(
@@ -266,18 +280,28 @@ def build_transformer(
     outputs = layers.Dense(vocab_size, activation="softmax")(x)
 
     model = keras.Model(
-        inputs=[pitch_input, cpint_input, cpcint_input, cpintfip_input, cpintfref_input],
+        inputs=[pitch_input, cpcint_input, cpintfip_input, cpintfref_input],
         outputs=outputs,
     )
     return model
 
 
-def compute_ic(model, xs_pitch, xs_cpint, xs_cpcint, xs_cpintfip, xs_cpintfref, ys):
+# ====================================================
+# IC COMPUTATION
+# ====================================================
+def compute_ic(
+        model,
+        xs_pitch,
+        xs_cpcint,
+        xs_cpintfip,
+        xs_cpintfref,
+        ys
+):
     """
     Compute Information Content (IC) in bits for each note prediction.
     Uses batched prediction to avoid GPU memory issues.
     """
-    inputs = [xs_pitch, xs_cpint, xs_cpcint, xs_cpintfip, xs_cpintfref]
+    inputs = [xs_pitch, xs_cpcint, xs_cpintfip, xs_cpintfref]
 
     # Predict in batches to avoid GPU compilation errors
     batch_size = 1024
@@ -300,9 +324,16 @@ def compute_ic(model, xs_pitch, xs_cpint, xs_cpcint, xs_cpintfip, xs_cpintfref, 
     return np.mean(all_ics), all_ics
 
 
-def compute_ic_per_melody(model, melodies, window_size, pitch_to_idx,
-                          interval_offset, interval_vocab_size,
-                          tonic_map=None, melody_ids=None):
+def compute_ic_per_melody(
+        model,
+        melodies,
+        window_size,
+        pitch_to_idx,
+        interval_offset,
+        interval_vocab_size,
+        tonic_map=None,
+        melody_ids=None
+):
     """
     Compute mean IC per melody using sliding windows.
     """
@@ -325,7 +356,6 @@ def compute_ic_per_melody(model, melodies, window_size, pitch_to_idx,
                 tonic_midi = tonic_pc_to_midi(tonic_pc, first_pitch)
 
         mel_xs_pitch = []
-        mel_xs_cpint = []
         mel_xs_cpcint = []
         mel_xs_cpintfip = []
         mel_xs_cpintfref = []
@@ -335,11 +365,6 @@ def compute_ic_per_melody(model, melodies, window_size, pitch_to_idx,
             start = max(0, t - window_size)
             context = indexed[start:t]
             raw_context = raw[start:t]
-
-            # cpint
-            raw_cpint = [0]
-            for i in range(1, len(raw_context)):
-                raw_cpint.append(raw_context[i] - raw_context[i - 1])
 
             # cpcint
             raw_cpcint = [0]
@@ -356,12 +381,6 @@ def compute_ic_per_melody(model, melodies, window_size, pitch_to_idx,
             pad_len = window_size - len(context)
 
             pitch_seq = [PAD] * pad_len + context
-
-            cpint_seq = [PAD] * pad_len
-            for iv in raw_cpint:
-                shifted = iv + interval_offset
-                shifted = max(1, min(shifted, interval_vocab_size - 1))
-                cpint_seq.append(shifted)
 
             cpcint_seq = [PAD] * pad_len
             for iv in raw_cpcint:
@@ -380,21 +399,19 @@ def compute_ic_per_melody(model, melodies, window_size, pitch_to_idx,
                 cpintfref_seq.append(shifted)
 
             mel_xs_pitch.append(pitch_seq)
-            mel_xs_cpint.append(cpint_seq)
             mel_xs_cpcint.append(cpcint_seq)
             mel_xs_cpintfip.append(cpintfip_seq)
             mel_xs_cpintfref.append(cpintfref_seq)
             mel_ys.append(indexed[t])
 
         mel_xs_pitch = np.array(mel_xs_pitch)
-        mel_xs_cpint = np.array(mel_xs_cpint)
         mel_xs_cpcint = np.array(mel_xs_cpcint)
         mel_xs_cpintfip = np.array(mel_xs_cpintfip)
         mel_xs_cpintfref = np.array(mel_xs_cpintfref)
         mel_ys = np.array(mel_ys)
 
         probs = model(
-            [mel_xs_pitch, mel_xs_cpint, mel_xs_cpcint,
+            [mel_xs_pitch, mel_xs_cpcint,
              mel_xs_cpintfip, mel_xs_cpintfref], training=False
         ).numpy()
 
@@ -412,15 +429,262 @@ def compute_ic_per_melody(model, melodies, window_size, pitch_to_idx,
     return melody_ics
 
 
-#     IDyOM command per fold:
-# (idyom:idyom <test-dataset-id> '(cpitch) '(cpitch) :models :ltm :pretraining-ids '(<train-dataset-id>))
+def compute_per_note_ic(
+        model,
+        melodies,
+        melody_names,
+        window_size,
+        pitch_to_idx,
+        interval_offset,
+        interval_vocab_size,
+        tonic_map=None,
+        melody_ids=None
+):
+    """
+    Compute IC at every note position for each melody.
+    Returns DataFrame with columns: melody, note, pitch, ic
+    """
+    PAD = 0
+    rows = []
+
+    for name in melody_names:
+        mel = melodies[name]
+
+        indexed, raw, valid_pos = [], [], []
+        for pos, p in enumerate(mel):
+            if p in pitch_to_idx:
+                indexed.append(pitch_to_idx[p])
+                raw.append(p)
+                valid_pos.append(pos)
+            else:
+                print(f"Warning: pitch {p} in {name} not in vocabulary, skipping")
+
+        if len(indexed) < 2:
+            print(f"Warning: {name} has fewer than 2 valid pitches, skipping")
+            continue
+
+        first_pitch = raw[0]
+
+        # Get tonic
+        tonic_midi = first_pitch
+        if tonic_map is not None and melody_ids is not None:
+            tonic_pc = tonic_map.get(name)
+            if tonic_pc is not None:
+                tonic_midi = tonic_pc_to_midi(tonic_pc, first_pitch)
+
+        mel_xs_pitch, mel_xs_cpcint = [], []
+        mel_xs_cpintfip, mel_xs_cpintfref = [], []
+        mel_ys = []
+        note_positions = []
+
+        for t in range(1, len(indexed)):
+            start = max(0, t - window_size)
+            context = indexed[start:t]
+            raw_context = raw[start:t]
+
+            raw_cpcint = [0]
+            for i in range(1, len(raw_context)):
+                raw_cpcint.append((raw_context[i] - raw_context[i - 1]) % 12)
+
+            raw_cpintfip = [p - first_pitch for p in raw_context]
+            raw_cpintfref = [p - tonic_midi for p in raw_context]
+
+            pad_len = window_size - len(context)
+            pitch_seq = [PAD] * pad_len + context
+
+            cpcint_seq = [PAD] * pad_len
+            for iv in raw_cpcint:
+                cpcint_seq.append(iv + 1)
+
+            cpintfip_seq = [PAD] * pad_len
+            for iv in raw_cpintfip:
+                s = max(1, min(iv + interval_offset, interval_vocab_size - 1))
+                cpintfip_seq.append(s)
+
+            cpintfref_seq = [PAD] * pad_len
+            for iv in raw_cpintfref:
+                s = max(1, min(iv + interval_offset, interval_vocab_size - 1))
+                cpintfref_seq.append(s)
+
+            mel_xs_pitch.append(pitch_seq)
+            mel_xs_cpintfip.append(cpintfip_seq)
+            mel_xs_cpintfref.append(cpintfref_seq)
+            mel_ys.append(indexed[t])
+            note_positions.append(valid_pos[t])
+
+        inputs = [np.array(x) for x in [
+            mel_xs_pitch,
+            mel_xs_cpcint,
+            mel_xs_cpintfip,
+            mel_xs_cpintfref
+        ]]
+        mel_ys = np.array(mel_ys)
+
+        probs = model(inputs, training=False).numpy()
+
+        for i in range(len(mel_xs_pitch)):
+            p = max(probs[i][mel_ys[i]], 1e-10)
+            rows.append({
+                "melody": name,
+                "note": note_positions[i],
+                "pitch": mel[note_positions[i]],
+                "ic": -np.log2(p),
+            })
+
+    return pd.DataFrame(rows)
+
+
+# ====================================================
+# SAVING HELPER
+# ====================================================
+def save_model_and_vocab(
+        model,
+        save_dir,
+        pitch_to_idx,
+        idx_to_pitch,
+        vocab_size,
+        window_size,
+        interval_offset,
+        interval_vocab_size,
+        filename="model.keras"
+):
+    """
+    Save model and vocabulary to a directory.
+    New function, we need to save extra information
+    (e.g. interval_offset, interval_vocab_size)
+    """
+    os.makedirs(save_dir, exist_ok=True)
+
+    model_path = os.path.join(save_dir, filename)
+    model.save(model_path)
+    print(f"Model saved to {model_path}")
+
+    vocab_name = filename.replace(".keras", "_vocab.json")
+    vocab_path = os.path.join(save_dir, vocab_name)
+    with open(vocab_path, "w") as f:
+        json.dump({
+            "pitch_to_idx": pitch_to_idx,
+            "idx_to_pitch": {str(k): v for k, v in idx_to_pitch.items()},
+            "vocab_size": vocab_size,
+            "window_size": window_size,
+            "interval_offset": interval_offset,
+            "interval_vocab_size": interval_vocab_size,
+        }, f, indent=2)
+    print(f"Vocabulary saved to {vocab_path}")
+
+
+# ====================================================
+# TRAINING
+# ====================================================
+def train_model(
+    melodies,
+    melody_ids=None,
+    tonic_map=None,
+    window_size=10,
+    embed_dim=64,
+    num_heads=4,
+    ff_dim=128,
+    num_layers=2,
+    dropout_rate=0.1,
+    batch_size=32,
+    epochs=50,
+    validation_split=0.1,
+    patience=5,
+    save_models_dir=None,
+):
+    """
+    Full-corpus training for the viewpoints transformer.
+    For proper evaluation, use run_kfold.
+    """
+    interval_offset, interval_vocab_size = get_fixed_interval_params()
+
+    xs_pitch, xs_cpcint, xs_cpintfip, xs_cpintfref, ys, \
+        vocab_size, pitch_to_idx, idx_to_pitch = \
+        prepare_melodies_sliding(
+            melodies, window_size=window_size,
+            interval_offset=interval_offset, interval_vocab_size=interval_vocab_size,
+            tonic_map=tonic_map, melody_ids=melody_ids,
+        )
+
+    print(f"Data prepared:")
+    print(f"  Melodies: {len(melodies)}")
+    print(f"  Vocab size: {vocab_size} ({vocab_size - 1} pitches + PAD)")
+    print(f"  Interval vocab size: {interval_vocab_size}")
+    print(f"  Window size: {window_size}")
+    print(f"  Training examples: {xs_pitch.shape[0]}")
+
+    model = build_transformer(
+        vocab_size=vocab_size, interval_vocab_size=interval_vocab_size,
+        window_size=window_size, embed_dim=embed_dim,
+        num_heads=num_heads, ff_dim=ff_dim, num_layers=num_layers,
+        dropout_rate=dropout_rate,
+    )
+
+    print(f"\n  Total parameters: {model.count_params():,}")
+    model.summary()
+
+    model.compile(
+        loss=keras.losses.SparseCategoricalCrossentropy(),
+        optimizer=keras.optimizers.Adam(learning_rate=1e-3),
+    )
+
+    # Manual validation split
+    n = len(ys)
+    n_val = int(n * validation_split)
+    indices = np.random.permutation(n)
+    val_idx = indices[:n_val]
+    train_idx = indices[n_val:]
+
+    all_xs = [xs_pitch, xs_cpcint, xs_cpintfip, xs_cpintfref]
+    train_inputs = [x[train_idx] for x in all_xs]
+    val_inputs = [x[val_idx] for x in all_xs]
+
+    checkpoint_path = tempfile.mktemp(suffix=".weights.h5")
+
+    callbacks = [
+        keras.callbacks.EarlyStopping(
+            monitor="val_loss", patience=patience, restore_best_weights=False
+        ),
+        keras.callbacks.ModelCheckpoint(
+            checkpoint_path, monitor="val_loss",
+            save_best_only=True, save_weights_only=True,
+        ),
+    ]
+
+    history = model.fit(
+        train_inputs, ys[train_idx],
+        validation_data=(val_inputs, ys[val_idx]),
+        batch_size=batch_size, epochs=epochs,
+        callbacks=callbacks,
+    )
+
+    model.load_weights(checkpoint_path)
+    if os.path.exists(checkpoint_path):
+        os.remove(checkpoint_path)
+
+    # Save model if directory provided
+    if save_models_dir is not None:
+        os.makedirs(save_models_dir, exist_ok=True)
+        save_path = os.path.join(save_models_dir, "model.weights.h5")
+        model.save_weights(save_path)
+        print(f"Model saved to {save_path}")
+
+    return model, history, {
+        "vocab_size": vocab_size,
+        "interval_vocab_size": interval_vocab_size,
+        "interval_offset": interval_offset,
+        "pitch_to_idx": pitch_to_idx,
+        "idx_to_pitch": idx_to_pitch,
+        "window_size": window_size,
+    }
+
 
 def run_kfold(
     melodies,
     melody_ids=None,
     tonic_map=None,
     k=10,
-    window_size=16,
+    window_size=10,
     embed_dim=64,
     num_heads=4,
     ff_dim=128,
@@ -431,6 +695,7 @@ def run_kfold(
     patience=5,
     random_state=42,
     export_folds_path=None,
+    save_models_dir=None,
 ):
     """
     K-fold cross-validation for fair comparison with IDyOM.
@@ -475,8 +740,8 @@ def run_kfold(
             })
 
         # Prepare training data
-        xs_pitch_train, xs_cpint_train, xs_cpcint_train, xs_cpintfip_train, xs_cpintfref_train, \
-            ys_train, vocab_size, pitch_to_idx, _ = \
+        xs_pitch_train, xs_cpcint_train, xs_cpintfip_train, xs_cpintfref_train, \
+            ys_train, vocab_size, pitch_to_idx, idx_to_pitch = \
             prepare_melodies_sliding(
                 train_melodies, window_size=window_size,
                 interval_offset=interval_offset, interval_vocab_size=interval_vocab_size,
@@ -484,7 +749,7 @@ def run_kfold(
             )
 
         # Test data: reuse training pitch vocab
-        xs_pitch_test, xs_cpint_test, xs_cpcint_test, xs_cpintfip_test, xs_cpintfref_test, \
+        xs_pitch_test, xs_cpcint_test, xs_cpintfip_test, xs_cpintfref_test, \
             ys_test, _, _, _ = \
             prepare_melodies_sliding(
                 test_melodies, window_size=window_size,
@@ -498,9 +763,13 @@ def run_kfold(
 
         # Build and train
         model = build_transformer(
-            vocab_size=vocab_size, interval_vocab_size=interval_vocab_size,
-            window_size=window_size, embed_dim=embed_dim,
-            num_heads=num_heads, ff_dim=ff_dim, num_layers=num_layers,
+            vocab_size=vocab_size,
+            interval_vocab_size=interval_vocab_size,
+            window_size=window_size,
+            embed_dim=embed_dim,
+            num_heads=num_heads,
+            ff_dim=ff_dim,
+            num_layers=num_layers,
             dropout_rate=dropout_rate,
         )
 
@@ -519,7 +788,7 @@ def run_kfold(
         val_idx = indices[:n_val]
         train_idx_inner = indices[n_val:]
 
-        all_train_xs = [xs_pitch_train, xs_cpint_train, xs_cpcint_train,
+        all_train_xs = [xs_pitch_train, xs_cpcint_train,
                         xs_cpintfip_train, xs_cpintfref_train]
         train_inputs = [x[train_idx_inner] for x in all_train_xs]
         val_inputs = [x[val_idx] for x in all_train_xs]
@@ -549,9 +818,17 @@ def run_kfold(
         if os.path.exists(checkpoint_path):
             os.remove(checkpoint_path)
 
+        # Save fold model
+        if save_models_dir:
+            save_model_and_vocab(
+                model, save_models_dir, pitch_to_idx, idx_to_pitch,
+                vocab_size, window_size, interval_offset, interval_vocab_size,
+                filename=f"fold_{fold + 1}.keras",
+            )
+
         # Evaluate on test fold
         mean_ic, ics = compute_ic(
-            model, xs_pitch_test, xs_cpint_test, xs_cpcint_test,
+            model, xs_pitch_test, xs_cpcint_test,
             xs_cpintfip_test, xs_cpintfref_test, ys_test,
         )
         melody_ics = compute_ic_per_melody(
@@ -596,63 +873,146 @@ def run_kfold(
         "fold_assignments": df_folds,
     }
 
-"""## Essen"""
 
-essen_melodies = pd.read_csv("essen_unique_melodies.csv")["pitch"].apply(ast.literal_eval).tolist()
-esseb_melody_ids = pd.read_csv("essen_unique_melodies.csv")["melody_id"].tolist()
+# ====================================================
+# DATA LOADING
+# ====================================================
+def load_corpus(name):
+    df = pd.read_csv(f"data/{name}_unique_melodies.csv")
+    melodies = df["pitch"].apply(ast.literal_eval).tolist()
+    melody_ids = df["melody_id"].tolist()
+    return melodies, melody_ids
 
-# essen_melodies = pd.read_csv("essen_unique_melodies.csv")["pitch"].apply(ast.literal_eval).tolist()
 
-# model, history, data_info = train_model(essen_melodies, window_size=10, epochs=10)
+def load_meta(name):
+    return pd.read_csv(f"data/{name}_unique_meta_melodies.csv")
 
-# interval_offset = data_info["interval_offset"]
-# interval_vocab_size = data_info["interval_vocab_size"]
 
-# xs_pitch, xs_cpint, xs_cpcint, xs_cpintfip, xs_cpintfref, ys, _, _, _ = \
-#     prepare_melodies_sliding(
-#         essen_melodies, window_size=10,
-#         interval_offset=interval_offset, interval_vocab_size=interval_vocab_size,
-#     )
-# mean_ic, all_ics = compute_ic(model, xs_pitch, xs_cpint, xs_cpcint, xs_cpintfip, xs_cpintfref, ys)
-# print(f"\nMean IC: {mean_ic:.3f} bits")
+# ====================================================
+# CLI
+# ====================================================
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Viewpoints transformer experiments"
+    )
+    parser.add_argument(
+        "experiment",
+        choices=[
+            "kfold_essen",
+            "kfold_meertens",
+            "full_essen",
+            "full_meertens",
+            "hymn_ic",
+        ]
+    )
+    parser.add_argument("--window-size", type=int, default=10)
+    parser.add_argument("--epochs", type=int, default=75)
+    parser.add_argument("--patience", type=int, default=5)
+    parser.add_argument("--test-subset", type=int, default=None)
+    parser.add_argument("--save-models-dir", type=str, default=None)
+    parser.add_argument("--hymn-lisp", type=str, default=None)
+    args = parser.parse_args()
 
-"""## Meertens"""
+    # ------------------------------------------------------------------
+    if args.experiment == "kfold_essen":
+        melodies, ids = load_corpus("essen")
+        run_kfold(
+            melodies,
+            melody_ids=ids,
+            k=10,
+            window_size=args.window_size,
+            epochs=args.epochs,
+            export_folds_path=f"essen_{args.window_size}_folds_viewpoint.csv",
+            save_models_dir=(
+                args.save_models_dir or "models/kfold_viewpoints_essen"
+            ),
+        )
 
-meertens_melodies = pd.read_csv("meertens_unique_melodies.csv")["pitch"].apply(ast.literal_eval).tolist()
-meertens_melody_ids = pd.read_csv("meertens_unique_melodies.csv")["melody_id"].tolist()
+    # ------------------------------------------------------------------
+    elif args.experiment == "kfold_meertens":
+        melodies, ids = load_corpus("meertens")
+        run_kfold(
+            melodies,
+            melody_ids=ids,
+            k=10,
+            window_size=args.window_size,
+            epochs=args.epochs,
+            patience=args.patience,
+            export_folds_path=f"meertens_{args.window_size}_folds_viewpoints.csv",
+            save_models_dir=(
+                args.save_models_dir or "models/kfold_viewpoints_meertens"
+            ),
+        )
 
-# meertens_model, meertens_history, meertens_data_info = train_model(
-#     meertens_melodies,
-#     window_size=10,
-#     epochs=50,
-# )
+    # ------------------------------------------------------------------
+    elif args.experiment == "full_essen":
+        melodies, ids = load_corpus("essen")
+        model, history, data_info = train_model(
+            melodies,
+            melody_ids=ids,
+            window_size=args.window_size,
+            epochs=args.epochs,
+            patience=args.patience,
+            save_models_dir=args.save_models_dir or "models/full_viewpoints_essen",
+        )
 
-# Compute IC
-# interval_offset = meertens_data_info["interval_offset"]
-# interval_vocab_size = meertens_data_info["interval_vocab_size"]
+    # ------------------------------------------------------------------
+    elif args.experiment == "hymn_ic":
+        model_dir = args.save_models_dir or "models/full_viewpoints_essen"
+        model_path = os.path.join(model_dir, "model.keras")
+        vocab_path = os.path.join(model_dir, "model_vocab.json")
 
-# xs_pitch, xs_cpint, xs_cpcint, xs_cpintfip, xs_cpintfref, ys, _, _, _ = \
-#     prepare_melodies_sliding(
-#         meertens_melodies, window_size=10,
-#         interval_offset=interval_offset, interval_vocab_size=interval_vocab_size,
-#     )
-# mean_ic, all_ics = compute_ic(meertens_model, xs_pitch, xs_cpint, xs_cpcint, xs_cpintfip, xs_cpintfref, ys)
-# print(f"\nMean IC: {mean_ic:.3f} bits")
+        if not os.path.exists(model_path):
+            print(f"Error: model not found at {model_path}")
+            print("Run 'full_essen' experiment first.")
+            exit(1)
 
-# Meertens
-results = run_kfold(
-    melodies=meertens_melodies,
-    melody_ids=meertens_melody_ids,
-    k=5,
-    window_size=10,
-    embed_dim=32,
-    num_heads=4,
-    ff_dim=64,
-    num_layers=2,
-    dropout_rate=0.1,
-    batch_size=32,
-    epochs=75,
-    patience=10,
-    export_folds_path="meertens_fold_assignments_viewpoints.csv",
-)
+        with open(vocab_path, "r") as f:
+            vocab_data = json.load(f)
+        pitch_to_idx = {int(k): v for k, v in vocab_data["pitch_to_idx"].items()}
+        window_size = vocab_data["window_size"]
+        vocab_size = vocab_data["vocab_size"]
+        interval_offset = vocab_data["interval_offset"]
+        interval_vocab_size = vocab_data["interval_vocab_size"]
 
+        model = build_transformer(
+            vocab_size=vocab_size,
+            interval_vocab_size=interval_vocab_size,
+            window_size=window_size,
+        )
+        model.load_weights(model_path)
+        print(f"Loaded model from {model_path}")
+
+        hymn_lisp_path = args.hymn_lisp or "data/hymns.lisp"
+        if not os.path.exists(hymn_lisp_path):
+            print(f"Error: hymn lisp not found at {hymn_lisp_path}")
+            exit(1)
+
+        melodies = parse_lisp_melodies(hymn_lisp_path)
+        print(f"Loaded {len(melodies)} hymn melodies")
+
+        # Check OOV
+        train_vocab = set(pitch_to_idx.keys())
+        hymn_vocab = set(p for mel in melodies.values() for p in mel)
+        oov = hymn_vocab - train_vocab
+        if oov:
+            print(f"Warning: {len(oov)} OOV pitches: {sorted(oov)}")
+
+        melody_names = sorted(melodies.keys())
+        ic_df = compute_per_note_ic(
+            model,
+            melodies,
+            melody_names,
+            window_size,
+            pitch_to_idx,
+            interval_offset,
+            interval_vocab_size,
+        )
+
+        output_path = "hymn_viewpoints_per_note_ic.csv"
+        ic_df.to_csv(output_path, index=False)
+        print(f"\nPer-note IC saved to {output_path}")
+        print(f"Total notes: {len(ic_df)}")
+        print(f"Mean IC: {ic_df['ic'].mean():.3f} bits")
+        print(f"\nPer-melody summary:")
+        print(ic_df.groupby("melody")["ic"].agg(["mean", "std", "count"]))
