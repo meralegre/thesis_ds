@@ -6,6 +6,7 @@ from sklearn.model_selection import KFold
 
 import ast
 import os
+import re
 import json
 import argparse
 import tempfile
@@ -63,6 +64,26 @@ def prepare_melodies(melodies, window_size=10, pitch_to_idx=None):
 
     return (np.array(xs), np.array(ys),
             vocab_size, pitch_to_idx, idx_to_pitch)
+
+
+def parse_lisp_melodies(filepath, viewpoint=":CPITCH"):
+  with open(filepath, 'r') as f:
+    text = f.read()
+
+  melody_pattern = r'\("([^"]+)"\s*\n((?:\s*\((?:\(:[A-Z].*?\)\s*)+\)\s*)+)'
+  melodies = {}
+
+  for match in re.finditer(melody_pattern, text):
+    name = match.group(1)
+    if "Dataset" in name or "Collection" in name:
+      continue
+    block = match.group(2)
+    pitch_pattern = rf'\({viewpoint}\s+(\d+)\)'
+    pitches = [int(p) for p in re.findall(pitch_pattern, block)]
+    if pitches:
+      melodies[name] = pitches
+
+  return melodies
 
 
 # ============================================================
@@ -188,7 +209,7 @@ def compute_ic(model, xs, ys):
     return np.mean(all_ics), all_ics
 
 
-def compute_ic_per_melody(model, melodies, window_size, pitch_to_idx):
+def compute_per_melody_ic(model, melodies, window_size, pitch_to_idx):
     """
     Compute mean IC per melody using sliding windows.
     """
@@ -244,8 +265,8 @@ def compute_per_note_ic(model, melodies, melody_names, window_size, pitch_to_idx
         indexed = []
         valid_positions = []
         for pos, p in enumerate(mel):
-            if p in pitch_to_idx:
-                indexed.append(pitch_to_idx[p])
+            if int(p) in pitch_to_idx:
+                indexed.append(pitch_to_idx[int(p)])
                 valid_positions.append(pos)
             else:
                 print(f"Warning: pitch {p} in {name} not in vocabulary, skipping")
@@ -538,8 +559,6 @@ def run_kfold(
         "fold_assignments": df_folds,
     }
 
-
-
 def run_cross_corpus(
     train_melodies,
     test_melodies,
@@ -563,7 +582,7 @@ def run_cross_corpus(
     """
     Cross-corpus evaluation with sliding window: train on one corpus,
     test on another.
- 
+
     Vocabulary is built from the training corpus only. Test melodies
     with pitches outside the training vocabulary are skipped.
     """
@@ -571,7 +590,7 @@ def run_cross_corpus(
         train_ids = list(range(len(train_melodies)))
     if test_ids is None:
         test_ids = list(range(len(test_melodies)))
- 
+
     # Optionally subsample test corpus
     if test_subset is not None and test_subset < len(test_melodies):
         rng = np.random.RandomState(random_state)
@@ -579,30 +598,30 @@ def run_cross_corpus(
         test_melodies = [test_melodies[i] for i in subset_idx]
         test_ids = [test_ids[i] for i in subset_idx]
         print(f"Subsampled test corpus to {test_subset} melodies")
- 
+
     # Export test subset metadata for IDyOM
     if export_test_csv is not None and test_meta is not None:
         subset_meta = test_meta[test_meta["melody_id"].isin(test_ids)].copy()
         subset_meta.to_csv(export_test_csv, index=False)
         print(f"Test subset saved to: {export_test_csv} ({len(subset_meta)} melodies)")
- 
+
     print(f"{'='*60}")
     print(f"CROSS-CORPUS (sliding, window={window_size}): "
           f"Train={len(train_melodies)}  Test={len(test_melodies)}")
     print(f"{'='*60}")
- 
+
     # Prepare training data (vocabulary from training corpus only)
     xs_train, ys_train, vocab_size, pitch_to_idx, idx_to_pitch = \
         prepare_melodies(train_melodies, window_size=window_size)
- 
+
     # Prepare test data (reuses training vocabulary)
     xs_test, ys_test, _, _, _ = \
         prepare_melodies(test_melodies, window_size=window_size,
                                 pitch_to_idx=pitch_to_idx)
- 
+
     print(f"Vocab size (from train): {vocab_size}")
     print(f"Train examples: {len(ys_train)}  Test examples: {len(ys_test)}")
- 
+
     # Build model
     model = build_transformer(
         vocab_size=vocab_size, window_size=window_size, embed_dim=embed_dim,
@@ -610,19 +629,19 @@ def run_cross_corpus(
         dropout_rate=dropout_rate,
     )
     print(f"Total parameters: {model.count_params():,}")
- 
+
     model.compile(
         loss=keras.losses.SparseCategoricalCrossentropy(),
         optimizer=keras.optimizers.Adam(learning_rate=1e-3),
     )
- 
+
     # Manual validation split
     n = len(ys_train)
     n_val = int(n * 0.1)
     indices = np.random.RandomState(random_state).permutation(n)
     val_idx = indices[:n_val]
     train_idx_inner = indices[n_val:]
- 
+
     checkpoint_path = tempfile.mktemp(suffix=".weights.h5")
     callbacks = [
         keras.callbacks.EarlyStopping(
@@ -633,14 +652,14 @@ def run_cross_corpus(
             save_best_only=True, save_weights_only=True,
         ),
     ]
- 
+
     model.fit(
         xs_train[train_idx_inner], ys_train[train_idx_inner],
         validation_data=(xs_train[val_idx], ys_train[val_idx]),
         batch_size=batch_size, epochs=epochs,
         callbacks=callbacks, verbose=1,
     )
- 
+
     model.load_weights(checkpoint_path)
     if os.path.exists(checkpoint_path):
         os.remove(checkpoint_path)
@@ -661,20 +680,115 @@ def run_cross_corpus(
                 "window_size": window_size,
             }, f, indent=2)
         print(f"Vocabulary saved to {vocab_path}")
- 
+
     # Evaluate on test corpus
     mean_ic, all_ics = compute_ic(model, xs_test, ys_test)
-    melody_ics = compute_ic_per_melody(model, test_melodies, window_size, pitch_to_idx)
- 
+    melody_ics = compute_per_melody_ic(model, test_melodies, window_size, pitch_to_idx)
+
+    # Map melody_idx back to actual melody IDs
+    for mic in melody_ics:
+        mic["melody_id"] = test_ids[mic["melody_idx"]]
+
+    # Per-note IC
+    id_to_melody = dict(zip(test_ids, test_melodies))
+    per_note_df = compute_per_note_ic(
+        model, id_to_melody, test_ids, window_size, pitch_to_idx,
+    )
+
+    # Save CSVs
+    base = export_test_csv.replace("_test.csv", "") if export_test_csv else "cross_corpus_sliding"
+
+    melody_ic_df = pd.DataFrame(melody_ics)
+    melody_ic_path = f"{base}_per_melody_ic.csv"
+    melody_ic_df.to_csv(melody_ic_path, index=False)
+    print(f"Per-melody IC saved to: {melody_ic_path} ({len(melody_ic_df)} melodies)")
+
+    per_note_path = f"{base}_per_note_ic.csv"
+    per_note_df.to_csv(per_note_path, index=False)
+    print(f"Per-note IC saved to: {per_note_path} ({len(per_note_df)} notes)")
+
     print(f"\nCross-corpus mean IC: {mean_ic:.3f} bits")
     print(f"Cross-corpus std  IC: {np.std(all_ics):.3f} bits")
- 
+
     return {
-        "mean_ic": mean_ic, "std_ic": np.std(all_ics),
-        "all_ics": all_ics, "melody_ics": melody_ics,
-        "vocab_size": vocab_size, "pitch_to_idx": pitch_to_idx,
-        "idx_to_pitch": idx_to_pitch, "test_ids": test_ids, "model": model,
+        "mean_ic": mean_ic,
+        "std_ic": np.std(all_ics),
+        "all_ics": all_ics,
+        "melody_ics": melody_ics,
+        "per_note_ic": per_note_df,
+        "vocab_size": vocab_size,
+        "pitch_to_idx": pitch_to_idx,
+        "idx_to_pitch": idx_to_pitch,
+        "test_ids": test_ids,
+        "model": model,
     }
+
+
+def run_hymn_ic(
+    model_dir,
+    hymn_lisp_path="data/hymns.lisp",
+):
+    """
+    Compute per-note and per-melody IC for hymn melodies
+    using a pre-trained model.
+    """
+    model_path = os.path.join(model_dir, "model.keras")
+    vocab_path = os.path.join(model_dir, "vocab.json")
+
+    if not os.path.exists(model_path):
+        print(f"Error: model not found at {model_path}")
+        print("Run 'full_essen' experiment first.")
+        exit(1)
+
+    if not os.path.exists(hymn_lisp_path):
+        print(f"Error: hymn lisp file not found at {hymn_lisp_path}")
+        exit(1)
+
+    # Load vocab and model
+    with open(vocab_path, "r") as f:
+        vocab_data = json.load(f)
+    pitch_to_idx = {int(k): v for k, v in vocab_data["pitch_to_idx"].items()}
+    window_size = vocab_data["window_size"]
+    vocab_size = vocab_data["vocab_size"]
+
+    model = build_transformer(vocab_size=vocab_size, window_size=window_size)
+    model.load_weights(model_path)
+    print(f"Loaded model from {model_path}")
+    print(f"Vocab size: {vocab_size}, Window size: {window_size}")
+
+    # Load hymn melodies
+    hymn_melodies = parse_lisp_melodies(hymn_lisp_path)
+    melody_names = sorted(hymn_melodies.keys())
+
+    # Out of vocab check
+    oov = set(p for mel in hymn_melodies.values() for p in mel) - set(pitch_to_idx.keys())
+    if oov:
+        print(f"Warning: {len(oov)} OOV pitches in hymns: {sorted(oov)}")
+
+    # Per-note IC
+    per_note_df = compute_per_note_ic(
+        model, hymn_melodies, melody_names, window_size, pitch_to_idx,
+    )
+    per_note_df.to_csv("hymn_sliding_transformer_per_note_ic.csv", index=False)
+    print(f"Per-note IC saved ({len(per_note_df)} notes)")
+
+    # Per-melody IC
+    hymn_melodies_list = [hymn_melodies[name] for name in melody_names]
+    melody_ics = compute_per_melody_ic(
+        model, hymn_melodies_list, window_size, pitch_to_idx,
+    )
+    for i, mic in enumerate(melody_ics):
+        mic["melody_id"] = melody_names[i]
+
+    melody_ic_df = pd.DataFrame(melody_ics)
+    melody_ic_df.to_csv("hymn_sliding_transformer_per_melody_ic.csv", index=False)
+    print(f"Per-melody IC saved ({len(melody_ic_df)} melodies)")
+
+    print(f"\nMean IC: {per_note_df['ic'].mean():.3f} bits")
+    print(f"\nPer-melody summary:")
+    print(per_note_df.groupby("melody")["ic"].agg(["mean", "std", "count"]))
+
+    return {"per_note_ic": per_note_df, "melody_ics": melody_ic_df}
 
 
 # ============================================================
@@ -686,14 +800,16 @@ def load_corpus(name):
     melodies = df["pitch"].apply(ast.literal_eval).tolist()
     melody_ids = df["melody_id"].tolist()
     return melodies, melody_ids
- 
- 
+
+
 def load_meta(name):
     """Load melody metadata (filename, path) for IDyOM export."""
     return pd.read_csv(f"data/{name}_unique_meta_melodies.csv")
- 
- 
+
+
+# ============================================================
 # CLI ENTRY POINT
+# ============================================================
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Sliding-window transformer experiments"
@@ -716,6 +832,8 @@ if __name__ == "__main__":
                         help="Directory to save trained models")
     parser.add_argument("--hymn-lisp", type=str, default=None,
                         help="Path to hymn melodies lisp export from IDyOM")
+    parser.add_argument("--trained-model-dir", type=str, default=None,
+                        help="Directory with a trained model to load (for hymn_ic)")
     args = parser.parse_args()
 
     # ------------------------------------------------------------------
@@ -724,7 +842,7 @@ if __name__ == "__main__":
         model, history, data_info = train_model(
             melodies, window_size=args.window_size,
             epochs=args.epochs, patience=args.patience,
-            save_models_dir=args.save_models_dir or "models/sliding_essen",
+            save_models_dir=args.save_models_dir or "models/sliding_window/sliding_essen",
         )
 
     # ------------------------------------------------------------------
@@ -733,7 +851,7 @@ if __name__ == "__main__":
         model, history, data_info = train_model(
             melodies, window_size=args.window_size,
             epochs=args.epochs, patience=args.patience,
-            save_models_dir=args.save_models_dir or "models/sliding_meertens",
+            save_models_dir=args.save_models_dir or "models/sliding_window/sliding_meertens",
         )
 
     # ------------------------------------------------------------------
@@ -747,7 +865,7 @@ if __name__ == "__main__":
                 f"essen_{args.window_size}_folds_sliding.csv"
             ),
             save_models_dir=(
-                args.save_models_dir or "models/kfold_essen"
+                args.save_models_dir or "models/sliding_window/kfold_essen"
             ),
         )
 
@@ -763,7 +881,7 @@ if __name__ == "__main__":
             ),
             save_models_dir=(
                 args.save_models_dir
-                or "models/kfold_meertens"
+                or "models/sliding_window/kfold_meertens"
             ),
         )
 
@@ -783,7 +901,7 @@ if __name__ == "__main__":
             export_test_csv="cross_corpus_sliding_essen2meertens_test.csv",
             save_models_dir=(
                 args.save_models_dir
-                or f"models/cross_corpus_sliding_essen2meertens"
+                or f"models/sliding_window/cross_corpus_sliding_essen2meertens"
             )
         )
 
@@ -802,67 +920,13 @@ if __name__ == "__main__":
             export_test_csv="cross_corpus_sliding_meertens2essen_test.csv",
             save_models_dir=(
                 args.save_models_dir
-                or f"models/cross_corpus_sliding_meertens2essen"
+                or f"models/sliding_window/cross_corpus_sliding_meertens2essen"
             )
         )
 
     # ------------------------------------------------------------------
     elif args.experiment == "hymn_ic":
-        # Load the saved sliding_essen model
-        model_dir = args.save_models_dir or "models/sliding_essen"
-        model_path = os.path.join(model_dir, "model.keras")
-        vocab_path = os.path.join(model_dir, "vocab.json")
-
-        if not os.path.exists(model_path):
-            print(f"Error: model not found at {model_path}")
-            print("Run 'sliding_essen' experiment first.")
-            exit(1)
-
-        # Load vocab
-        with open(vocab_path, "r") as f:
-            vocab_data = json.load(f)
-        pitch_to_idx = {int(k): v for k, v in vocab_data["pitch_to_idx"].items()}
-        window_size = vocab_data["window_size"]
-        vocab_size = vocab_data["vocab_size"]
-
-        # Rebuild and load model
-        model = build_transformer(
-            vocab_size=vocab_size, window_size=window_size,
+        run_hymn_ic(
+            model_dir=args.trained_model_dir or "models/sliding_window/sliding_essen",
+            hymn_lisp_path=args.hymn_lisp or "data/hymns.lisp",
         )
-        model.load_weights(model_path)
-        print(f"Loaded model from {model_path}")
-        print(f"Vocab size: {vocab_size}, Window size: {window_size}")
-
-        # Load hymn melodies from lisp export
-        hymn_lisp_path = args.hymn_lisp or "data/hymns.lisp"
-        if not os.path.exists(hymn_lisp_path):
-            print(f"Error: hymn lisp file not found at {hymn_lisp_path}")
-            exit(1)
-
-        hymn_melodies = parse_lisp_melodies(hymn_lisp_path)
-
-        # Check for out-of-vocabulary pitches
-        essen_vocab = set(pitch_to_idx.keys())
-        hymn_vocab = set(p for mel in hymn_melodies.values() for p in mel)
-        oov = hymn_vocab - essen_vocab
-        if oov:
-            print(f"Warning: {len(oov)} OOV pitches in hymns: {sorted(oov)}")
-
-        # Compute per-note IC
-        melody_names = sorted(hymn_melodies.keys())
-        ic_df = compute_per_note_ic(
-            model,
-            hymn_melodies,
-            melody_names,
-            window_size,
-            pitch_to_idx,
-        )
-
-        # Save
-        output_path = "hymn_transformer_per_note_ic.csv"
-        ic_df.to_csv(output_path, index=False)
-        print(f"\nPer-note IC saved to {output_path}")
-        print(f"Total notes: {len(ic_df)}")
-        print(f"Mean IC: {ic_df['ic'].mean():.3f} bits")
-        print(f"\nPer-melody summary:")
-        print(ic_df.groupby("melody")["ic"].agg(["mean", "std", "count"]))

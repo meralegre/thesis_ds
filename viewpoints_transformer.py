@@ -7,6 +7,7 @@ from sklearn.model_selection import KFold
 import tempfile
 
 import os
+import re
 import ast
 import json
 import argparse
@@ -168,6 +169,26 @@ def prepare_melodies_sliding(
     )
 
 
+def parse_lisp_melodies(filepath, viewpoint=":CPITCH"):
+  with open(filepath, 'r') as f:
+    text = f.read()
+
+  melody_pattern = r'\("([^"]+)"\s*\n((?:\s*\((?:\(:[A-Z].*?\)\s*)+\)\s*)+)'
+  melodies = {}
+
+  for match in re.finditer(melody_pattern, text):
+    name = match.group(1)
+    if "Dataset" in name or "Collection" in name:
+      continue
+    block = match.group(2)
+    pitch_pattern = rf'\({viewpoint}\s+(\d+)\)'
+    pitches = [int(p) for p in re.findall(pitch_pattern, block)]
+    if pitches:
+      melodies[name] = pitches
+
+  return melodies
+
+
 # ====================================================
 # MODEL COMPONENTS
 # ====================================================
@@ -324,7 +345,7 @@ def compute_ic(
     return np.mean(all_ics), all_ics
 
 
-def compute_ic_per_melody(
+def compute_per_melody_ic(
         model,
         melodies,
         window_size,
@@ -452,8 +473,8 @@ def compute_per_note_ic(
 
         indexed, raw, valid_pos = [], [], []
         for pos, p in enumerate(mel):
-            if p in pitch_to_idx:
-                indexed.append(pitch_to_idx[p])
+            if int(p) in pitch_to_idx:
+                indexed.append(pitch_to_idx[int(p)])
                 raw.append(p)
                 valid_pos.append(pos)
             else:
@@ -507,6 +528,7 @@ def compute_per_note_ic(
                 cpintfref_seq.append(s)
 
             mel_xs_pitch.append(pitch_seq)
+            mel_xs_cpcint.append(cpcint_seq)
             mel_xs_cpintfip.append(cpintfip_seq)
             mel_xs_cpintfref.append(cpintfref_seq)
             mel_ys.append(indexed[t])
@@ -538,15 +560,19 @@ def compute_per_note_ic(
 # SAVING HELPER
 # ====================================================
 def save_model_and_vocab(
-        model,
-        save_dir,
-        pitch_to_idx,
-        idx_to_pitch,
-        vocab_size,
-        window_size,
-        interval_offset,
-        interval_vocab_size,
-        filename="model.keras"
+    model,
+    save_dir,
+    pitch_to_idx,
+    idx_to_pitch,
+    vocab_size,
+    window_size,
+    interval_offset,
+    interval_vocab_size,
+    filename="model.keras",
+    embed_dim=32,
+    num_heads=4,
+    ff_dim=64,
+    num_layers=2,
 ):
     """
     Save model and vocabulary to a directory.
@@ -569,9 +595,12 @@ def save_model_and_vocab(
             "window_size": window_size,
             "interval_offset": interval_offset,
             "interval_vocab_size": interval_vocab_size,
+            "embed_dim": embed_dim,
+            "num_heads": num_heads,
+            "ff_dim": ff_dim,
+            "num_layers": num_layers,
         }, f, indent=2)
     print(f"Vocabulary saved to {vocab_path}")
-
 
 # ====================================================
 # TRAINING
@@ -581,9 +610,9 @@ def train_model(
     melody_ids=None,
     tonic_map=None,
     window_size=10,
-    embed_dim=64,
+    embed_dim=32,
     num_heads=4,
-    ff_dim=128,
+    ff_dim=64,
     num_layers=2,
     dropout_rate=0.1,
     batch_size=32,
@@ -593,8 +622,8 @@ def train_model(
     save_models_dir=None,
 ):
     """
-    Full-corpus training for the viewpoints transformer.
-    For proper evaluation, use run_kfold.
+    Full-corpus training for the viewpoints transformer.
+    For proper evaluation, use run_kfold.
     """
     interval_offset, interval_vocab_size = get_fixed_interval_params()
 
@@ -628,7 +657,6 @@ def train_model(
         optimizer=keras.optimizers.Adam(learning_rate=1e-3),
     )
 
-    # Manual validation split
     n = len(ys)
     n_val = int(n * validation_split)
     indices = np.random.permutation(n)
@@ -643,7 +671,7 @@ def train_model(
 
     callbacks = [
         keras.callbacks.EarlyStopping(
-            monitor="val_loss", patience=patience, restore_best_weights=False
+            monitor="val_loss", patience=patience, restore_best_weights=False,
         ),
         keras.callbacks.ModelCheckpoint(
             checkpoint_path, monitor="val_loss",
@@ -662,12 +690,13 @@ def train_model(
     if os.path.exists(checkpoint_path):
         os.remove(checkpoint_path)
 
-    # Save model if directory provided
     if save_models_dir is not None:
-        os.makedirs(save_models_dir, exist_ok=True)
-        save_path = os.path.join(save_models_dir, "model.weights.h5")
-        model.save_weights(save_path)
-        print(f"Model saved to {save_path}")
+        save_model_and_vocab(
+            model, save_models_dir, pitch_to_idx, idx_to_pitch,
+            vocab_size, window_size, interval_offset, interval_vocab_size,
+            embed_dim=embed_dim, num_heads=num_heads,
+            ff_dim=ff_dim, num_layers=num_layers,
+        )
 
     return model, history, {
         "vocab_size": vocab_size,
@@ -685,9 +714,9 @@ def run_kfold(
     tonic_map=None,
     k=10,
     window_size=10,
-    embed_dim=64,
+    embed_dim=32,
     num_heads=4,
-    ff_dim=128,
+    ff_dim=64,
     num_layers=2,
     dropout_rate=0.1,
     batch_size=32,
@@ -819,11 +848,13 @@ def run_kfold(
             os.remove(checkpoint_path)
 
         # Save fold model
-        if save_models_dir:
+        if save_models_dir is not None:
             save_model_and_vocab(
                 model, save_models_dir, pitch_to_idx, idx_to_pitch,
                 vocab_size, window_size, interval_offset, interval_vocab_size,
                 filename=f"fold_{fold + 1}.keras",
+                embed_dim=embed_dim, num_heads=num_heads,
+                ff_dim=ff_dim, num_layers=num_layers,
             )
 
         # Evaluate on test fold
@@ -831,7 +862,7 @@ def run_kfold(
             model, xs_pitch_test, xs_cpcint_test,
             xs_cpintfip_test, xs_cpintfref_test, ys_test,
         )
-        melody_ics = compute_ic_per_melody(
+        melody_ics = compute_per_melody_ic(
             model, test_melodies, window_size, pitch_to_idx,
             interval_offset, interval_vocab_size,
             tonic_map=tonic_map, melody_ids=test_ids,
@@ -874,6 +905,99 @@ def run_kfold(
     }
 
 
+def run_hymn_ic(
+    model_dir,
+    hymn_lisp_path="data/hymns.lisp",
+):
+    """
+    Compute per-note and per-melody IC for hymn melodies
+    using a pre-trained viewpoints model.
+    """
+    model_path = os.path.join(model_dir, "model.keras")
+    vocab_path = os.path.join(model_dir, "model_vocab.json")
+
+    if not os.path.exists(model_path):
+        print(f"Error: model not found at {model_path}")
+        print("Run 'full_essen' experiment first.")
+        exit(1)
+
+    if not os.path.exists(vocab_path):
+        print(f"Error: vocab not found at {vocab_path}")
+        exit(1)
+
+    if not os.path.exists(hymn_lisp_path):
+        print(f"Error: hymn lisp file not found at {hymn_lisp_path}")
+        exit(1)
+
+    # Load vocab and config
+    with open(vocab_path, "r") as f:
+        vocab_data = json.load(f)
+    pitch_to_idx = {int(k): v for k, v in vocab_data["pitch_to_idx"].items()}
+    idx_to_pitch = {int(k): v for k, v in vocab_data["idx_to_pitch"].items()}
+    vocab_size = vocab_data["vocab_size"]
+    interval_vocab_size = vocab_data["interval_vocab_size"]
+    interval_offset = vocab_data["interval_offset"]
+    window_size = vocab_data["window_size"]
+
+    # Rebuild and load model (use saved hyperparams, or training defaults)
+    embed_dim = vocab_data.get("embed_dim", 32)
+    num_heads = vocab_data.get("num_heads", 4)
+    ff_dim = vocab_data.get("ff_dim", 64)
+    num_layers = vocab_data.get("num_layers", 2)
+
+    model = build_transformer(
+        vocab_size=vocab_size,
+        interval_vocab_size=interval_vocab_size,
+        window_size=window_size,
+        embed_dim=embed_dim,
+        num_heads=num_heads,
+        ff_dim=ff_dim,
+        num_layers=num_layers,
+    )
+    model.load_weights(model_path)
+    print(f"Loaded model from {model_path}")
+    print(f"Vocab size: {vocab_size}, Window size: {window_size}")
+
+    # Load hymn melodies
+    hymn_melodies = parse_lisp_melodies(hymn_lisp_path)
+    melody_names = sorted(hymn_melodies.keys())
+    print(f"Loaded {len(hymn_melodies)} hymn melodies")
+
+    # out of vocab check
+    oov = set(p for mel in hymn_melodies.values() for p in mel) - set(pitch_to_idx.keys())
+    if oov:
+        print(f"Warning: {len(oov)} OOV pitches in hymns: {sorted(oov)}")
+
+    # Per-note IC (pass raw melodies dict)
+    per_note_df = compute_per_note_ic(
+        model, hymn_melodies, melody_names, window_size,
+        pitch_to_idx, interval_offset, interval_vocab_size,
+    )
+    per_note_path = "hymn_viewpoints_per_note_ic.csv"
+    per_note_df.to_csv(per_note_path, index=False)
+    print(f"Per-note IC saved to: {per_note_path} ({len(per_note_df)} notes)")
+
+    # Per-melody IC
+    hymn_melodies_list = [hymn_melodies[name] for name in melody_names]
+    melody_ics = compute_per_melody_ic(
+        model, hymn_melodies_list, window_size, pitch_to_idx,
+        interval_offset, interval_vocab_size,
+    )
+    for i, mic in enumerate(melody_ics):
+        mic["melody_id"] = melody_names[i]
+
+    melody_ic_df = pd.DataFrame(melody_ics)
+    melody_ic_path = "hymn_viewpoints_per_melody_ic.csv"
+    melody_ic_df.to_csv(melody_ic_path, index=False)
+    print(f"Per-melody IC saved to: {melody_ic_path} ({len(melody_ic_df)} melodies)")
+
+    print(f"\nMean IC: {per_note_df['ic'].mean():.3f} bits")
+    print(f"\nPer-melody summary:")
+    print(per_note_df.groupby("melody")["ic"].agg(["mean", "std", "count"]))
+
+    return {"per_note_ic": per_note_df, "melody_ics": melody_ic_df}
+
+
 # ====================================================
 # DATA LOADING
 # ====================================================
@@ -911,6 +1035,8 @@ if __name__ == "__main__":
     parser.add_argument("--test-subset", type=int, default=None)
     parser.add_argument("--save-models-dir", type=str, default=None)
     parser.add_argument("--hymn-lisp", type=str, default=None)
+    parser.add_argument("--trained-model-dir", type=str, default=None,
+                        help="Directory with a trained model to load (for hymn_ic)")
     args = parser.parse_args()
 
     # ------------------------------------------------------------------
@@ -924,7 +1050,7 @@ if __name__ == "__main__":
             epochs=args.epochs,
             export_folds_path=f"essen_{args.window_size}_folds_viewpoint.csv",
             save_models_dir=(
-                args.save_models_dir or "models/kfold_viewpoints_essen"
+                args.save_models_dir or "models/viewpoints/kfold_viewpoints_essen"
             ),
         )
 
@@ -940,7 +1066,7 @@ if __name__ == "__main__":
             patience=args.patience,
             export_folds_path=f"meertens_{args.window_size}_folds_viewpoints.csv",
             save_models_dir=(
-                args.save_models_dir or "models/kfold_viewpoints_meertens"
+                args.save_models_dir or "models/viewpoints/kfold_viewpoints_meertens"
             ),
         )
 
@@ -953,66 +1079,12 @@ if __name__ == "__main__":
             window_size=args.window_size,
             epochs=args.epochs,
             patience=args.patience,
-            save_models_dir=args.save_models_dir or "models/full_viewpoints_essen",
+            save_models_dir=args.save_models_dir or "models/viewpoints/full_viewpoints_essen",
         )
 
     # ------------------------------------------------------------------
     elif args.experiment == "hymn_ic":
-        model_dir = args.save_models_dir or "models/full_viewpoints_essen"
-        model_path = os.path.join(model_dir, "model.keras")
-        vocab_path = os.path.join(model_dir, "model_vocab.json")
-
-        if not os.path.exists(model_path):
-            print(f"Error: model not found at {model_path}")
-            print("Run 'full_essen' experiment first.")
-            exit(1)
-
-        with open(vocab_path, "r") as f:
-            vocab_data = json.load(f)
-        pitch_to_idx = {int(k): v for k, v in vocab_data["pitch_to_idx"].items()}
-        window_size = vocab_data["window_size"]
-        vocab_size = vocab_data["vocab_size"]
-        interval_offset = vocab_data["interval_offset"]
-        interval_vocab_size = vocab_data["interval_vocab_size"]
-
-        model = build_transformer(
-            vocab_size=vocab_size,
-            interval_vocab_size=interval_vocab_size,
-            window_size=window_size,
+        run_hymn_ic(
+            model_dir=args.trained_model_dir or "models/viewpoints/full_viewpoints_essen",
+            hymn_lisp_path=args.hymn_lisp or "data/hymns.lisp",
         )
-        model.load_weights(model_path)
-        print(f"Loaded model from {model_path}")
-
-        hymn_lisp_path = args.hymn_lisp or "data/hymns.lisp"
-        if not os.path.exists(hymn_lisp_path):
-            print(f"Error: hymn lisp not found at {hymn_lisp_path}")
-            exit(1)
-
-        melodies = parse_lisp_melodies(hymn_lisp_path)
-        print(f"Loaded {len(melodies)} hymn melodies")
-
-        # Check OOV
-        train_vocab = set(pitch_to_idx.keys())
-        hymn_vocab = set(p for mel in melodies.values() for p in mel)
-        oov = hymn_vocab - train_vocab
-        if oov:
-            print(f"Warning: {len(oov)} OOV pitches: {sorted(oov)}")
-
-        melody_names = sorted(melodies.keys())
-        ic_df = compute_per_note_ic(
-            model,
-            melodies,
-            melody_names,
-            window_size,
-            pitch_to_idx,
-            interval_offset,
-            interval_vocab_size,
-        )
-
-        output_path = "hymn_viewpoints_per_note_ic.csv"
-        ic_df.to_csv(output_path, index=False)
-        print(f"\nPer-note IC saved to {output_path}")
-        print(f"Total notes: {len(ic_df)}")
-        print(f"Mean IC: {ic_df['ic'].mean():.3f} bits")
-        print(f"\nPer-melody summary:")
-        print(ic_df.groupby("melody")["ic"].agg(["mean", "std", "count"]))
