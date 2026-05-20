@@ -4,9 +4,7 @@ from scipy.stats import t as t_dist
 
 
 def compare_models(tf_folds, idyom_folds, experiment_name, corpus_name):
-    """
-    Compare Transformer and IDyOM IC values across folds.
-    """
+    """Compare Transformer and IDyOM IC values across folds."""
     tf = np.array(tf_folds)
     idyom = np.array(idyom_folds)
     differences = tf - idyom
