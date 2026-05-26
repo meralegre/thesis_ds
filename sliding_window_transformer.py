@@ -8,12 +8,25 @@ import ast
 import os
 import re
 import json
+import random
 import argparse
 import tempfile
 
 os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
 os.environ["XLA_FLAGS"] = "--xla_gpu_enable_triton_gemm=false"
 os.environ["TF_GPU_ALLOCATOR"] = "cuda_malloc_async"
+
+
+# ============================================================
+# REPRODUCIBILITY
+# ============================================================
+def set_seed(seed=42):
+    """Set random seeds for full reproducibility."""
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    keras.utils.set_random_seed(seed)
+    os.environ["TF_DETERMINISTIC_OPS"] = "1"
 
 
 # ============================================================
@@ -834,7 +847,10 @@ if __name__ == "__main__":
                         help="Path to hymn melodies lisp export from IDyOM")
     parser.add_argument("--trained-model-dir", type=str, default=None,
                         help="Directory with a trained model to load (for hymn_ic)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducibility")
     args = parser.parse_args()
+    set_seed(args.seed)
 
     # ------------------------------------------------------------------
     if args.experiment == "full_essen":

@@ -7,8 +7,21 @@ from sklearn.model_selection import KFold
 import os
 import ast
 import json
+import random
 import argparse
 import tempfile
+
+
+# ============================================================
+# REPRODUCIBILITY
+# ============================================================
+def set_seed(seed=42):
+    """Set random seeds for full reproducibility."""
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    keras.utils.set_random_seed(seed)
+    os.environ["TF_DETERMINISTIC_OPS"] = "1"
 
 # ============================================================
 # DATA PREPARATION
@@ -676,8 +689,12 @@ def run_cross_corpus(
 
     # Add melody names from metadata for alignment with IDyOM
     if test_meta is not None:
-        name_map = dict(zip(test_meta["melody_id"], test_meta["filename"]))
-        per_note_df["melody_name"] = per_note_df["melody_id"].map(name_map)
+        name_map = dict(zip(
+	    test_meta["melody_id"],
+            test_meta["filename"].apply(
+		lambda x: x.split("/")[-1].replace(".krn", "") if isinstance(x, str) else x
+        )))
+        per_note_df["melody_name"] = per_note_df["melody"].map(name_map)
         # Strip file extension if present
         per_note_df["melody_name"] = per_note_df["melody_name"].apply(
             lambda x: x.rsplit(".", 1)[0] if isinstance(x, str) and "." in x else x
@@ -835,8 +852,11 @@ if __name__ == "__main__":
                         help="Directory to save trained models")
     parser.add_argument("--hymn-lisp", type=str, default="data/hymns.lisp")
     parser.add_argument("--trained-model-dir", type=str, default=None)
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducibility")
 
     args = parser.parse_args()
+    set_seed(args.seed)
 
     # ------------------------------------------------------------------
     if args.experiment == "full_essen":
@@ -895,7 +915,7 @@ if __name__ == "__main__":
         train_mel, train_ids = load_corpus("essen")
         test_mel, test_ids = load_corpus("meertens")
         test_meta = load_meta("meertens")
-        max_len = args.max_len or max(len(m) for m in train_mel)
+        max_len = args.max_len or max(len(m) for m in train_mel + test_mel)
 
         run_cross_corpus(
             train_melodies=train_mel,

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 import pandas as pd
 import numpy as np
 import keras
@@ -10,11 +9,24 @@ import os
 import re
 import ast
 import json
+import random
 import argparse
 
 os.environ["TF_XLA_FLAGS"] = "--tf_xla_auto_jit=0"
 os.environ["XLA_FLAGS"] = "--xla_gpu_enable_triton_gemm=false"
 os.environ["TF_GPU_ALLOCATOR"] = "cuda_malloc_async"
+
+
+# ====================================================
+# REPRODUCIBILITY
+# ====================================================
+def set_seed(seed=42):
+    """Set random seeds for full reproducibility."""
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    random.seed(seed)
+    np.random.seed(seed)
+    keras.utils.set_random_seed(seed)
+    os.environ["TF_DETERMINISTIC_OPS"] = "1"
 
 # ====================================================
 # INTERVAL PARAMS
@@ -1037,7 +1049,10 @@ if __name__ == "__main__":
     parser.add_argument("--hymn-lisp", type=str, default=None)
     parser.add_argument("--trained-model-dir", type=str, default=None,
                         help="Directory with a trained model to load (for hymn_ic)")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="Random seed for reproducibility")
     args = parser.parse_args()
+    set_seed(args.seed)
 
     # ------------------------------------------------------------------
     if args.experiment == "kfold_essen":
