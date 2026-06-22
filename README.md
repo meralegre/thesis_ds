@@ -1,6 +1,6 @@
-# A Comparative Study of Neural Networks and IDyOM's Performance for Modeling Musical Expectation
+# Transformers and IDyOM under Matched Conditions: Modeling Melodic Expectation and Human Perception
 
-Master's thesis — Data Science, 2025–2026
+Master's thesis Data Science, 2025–2026
 
 This repository contains all code and results for a study comparing Transformer-based neural networks against IDyOM (Information Dynamics of Music) for predicting melodic expectation. The models are trained and evaluated on two folk music corpora (Essen and Meertens) and validated against human expectedness ratings (Pearce et al., 2010).
 
