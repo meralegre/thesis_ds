@@ -1,8 +1,9 @@
 from pathlib import Path
 import re
 
-src_root = Path("../data/meertens_clean")
-dst_root = Path("../data/meertens_minimal2")
+ROOT = Path(__file__).resolve().parent.parent
+src_root = ROOT / "data" / "meertens_clean"
+dst_root = ROOT / "data" / "meertens_minimal2"
 
 dur_re = re.compile(r'^(\d+\.*)([a-gA-Gr])')  # must start with duration then pitch/rest
 
