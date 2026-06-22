@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+.AppleDouble
+
+# Python
+__pycache__/
+*.py[cod]
+*.py~
+\#*\#
+.#*
+*.egg-info/
+.env
+.venv/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Archives (large, reproducible from source)
+*.zip
+
+# Pretrained models (large; available on request)
+pretrained_models/
+
+# Jobs outputs
+jobs/
+
+# IDyOM raw output (large .dat files; available on request)
+results/ic_values/idyom/
