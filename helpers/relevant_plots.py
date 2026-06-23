@@ -2,6 +2,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 from pathlib import Path
+from matplotlib.patches import Patch
+from matplotlib.lines import Line2D
 
 # ==========================================
 # Style configuration for double-column ACM 
@@ -159,7 +161,6 @@ def plot_perfold_combined():
             if row == 2:
                 ax.set_xlabel('Fold')
 
-    # Single legend at bottom
     handles, labels = axes[0][0].get_legend_handles_labels()
     fig.legend(handles, labels, loc='lower center', ncol=2,
               bbox_to_anchor=(0.5, -0.02), framealpha=0.9)
@@ -281,48 +282,65 @@ plot_cross_corpus_degradation()
 # ==========================================
 
 def plot_ic_difference():
-    """Dot plot showing IC difference (IDyOM - Transformer) per fold.
-    Positive = Transformer wins. Negative = IDyOM wins."""
-    fig, axes = plt.subplots(3, 2, figsize=(6.5, 6), sharex=True)
+    """Horizontal strip plot: ΔIC per fold, stacked by experiment,
+    Essen & Meertens as rows within each panel, shared x-axis."""
+    rng = np.random.default_rng(42)
 
     experiments = [
         ('exp1', 'Exp. 1: Full-Window'),
         ('exp2', 'Exp. 2: Sliding-Window'),
         ('exp4', 'Exp. 4: Viewpoints'),
     ]
-    corpora = [('essen', 'Essen'), ('meertens', 'Meertens')]
+    corpora = [('meertens', 'Meertens'), ('essen', 'Essen')]  # bottom to top
+
+    fig, axes = plt.subplots(3, 1, figsize=(5.5, 5.5), sharex=True)
+    fig.subplots_adjust(hspace=0.5, bottom=0.15)
 
     for row, (exp_key, exp_label) in enumerate(experiments):
-        for col, (corpus, corpus_label) in enumerate(corpora):
-            ax = axes[row][col]
+        ax = axes[row]
+
+        for y_pos, (corpus, corpus_label) in enumerate(corpora):
             t_vals = np.array(data[exp_key][corpus]['transformer'])
             i_vals = np.array(data[exp_key][corpus]['idyom'])
-            diff = i_vals - t_vals  # positive = Transformer wins
+            diff = i_vals - t_vals
 
             colors = [C_TRANSFORMER if d > 0 else C_IDYOM for d in diff]
-            ax.bar(folds, diff, color=colors, edgecolor='white', linewidth=0.3, width=0.6)
-            ax.axhline(0, color='black', linewidth=0.5)
-            ax.axhline(np.mean(diff), color='gray', linestyle='--', linewidth=0.8, alpha=0.7)
+            jitter = rng.uniform(-0.16, 0.16, size=len(diff))
 
-            ax.set_xticks(folds)
-            if row == 0:
-                ax.set_title(corpus_label, fontsize=9, fontweight='bold')
-            if col == 0:
-                ax.set_ylabel(f'{exp_label}\nΔIC (bits)', fontsize=7.5)
-            if row == 2:
-                ax.set_xlabel('Fold')
+            ax.scatter(diff, y_pos + jitter, c=colors, s=40, alpha=0.8,
+                       zorder=3, linewidths=0.4, edgecolors='white')
 
-    # Custom legend
-    from matplotlib.patches import Patch
+            # mean tick – extends beyond the jitter cloud
+            ax.plot([np.mean(diff)] * 2, [y_pos - 0.30, y_pos + 0.30],
+                    color='#333333', linewidth=1.8, zorder=5)
+
+        ax.axvline(0, color='black', linewidth=0.6)
+        ax.set_yticks([0, 1])
+        ax.set_yticklabels(['Meertens', 'Essen'], fontsize=9.5)
+        ax.set_ylim(-0.55, 1.55)
+        ax.set_title(exp_label, fontsize=10, fontweight='bold', pad=5)
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.grid(axis='x', linewidth=0.3, alpha=0.4)
+        ax.grid(axis='y', visible=False)
+
+    axes[-1].set_xlabel(
+        '$\\Delta$ IC  (IDyOM $-$ Transformer, bits)', fontsize=10)
+
     legend_elements = [
-        Patch(facecolor=C_TRANSFORMER, label='Transformer advantage'),
-        Patch(facecolor=C_IDYOM, label='IDyOM advantage'),
+        Line2D([0], [0], marker='o', color='w',
+               markerfacecolor=C_TRANSFORMER, markersize=7,
+               label='Transformer advantage'),
+        Line2D([0], [0], marker='o', color='w',
+               markerfacecolor=C_IDYOM, markersize=7,
+               label='IDyOM advantage'),
+        Line2D([0], [0], color='#333333', linewidth=1.8, label='Mean'),
     ]
-    fig.legend(handles=legend_elements, loc='lower center', ncol=2,
-              bbox_to_anchor=(0.5, -0.02), framealpha=0.9, fontsize=8)
+    fig.legend(handles=legend_elements, loc='lower center', ncol=3,
+               bbox_to_anchor=(0.53, 0.01), fontsize=8.5, framealpha=0.9)
 
-    plt.tight_layout(rect=[0, 0.03, 1, 1])
-    plt.savefig(f'{OUTPUT_DIR}/ic_difference_perfold.png', dpi=300, bbox_inches='tight')
+    plt.savefig(f'{OUTPUT_DIR}/ic_difference_perfold.png',
+                dpi=300, bbox_inches='tight')
     plt.close()
 
 plot_ic_difference()
